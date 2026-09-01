@@ -1,6 +1,8 @@
 import os
 from uuid import UUID
 from fastapi import FastAPI,Depends,UploadFile,File,HTTPException,status
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .database import engine,Base,get_db
@@ -18,6 +20,12 @@ from .service import (
     search_text_in_document,
     compute_tf_idf_similarity
 )
+from .vector_store import (
+    init_qdrant,
+    get_embedding,
+    check_similarity,
+    store_vector
+)
 
 Base.metadata.create_all(bind=engine)
 
@@ -30,6 +38,19 @@ app = FastAPI(
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@app.on_event("startup")
+def startup_event():
+    init_qdrant()
+
+@app.get("/", response_class=FileResponse)
+async def read_index():
+    return FileResponse("index.html")
+
+@app.get("/documents",response_model=list[DocumentResponse])
+def list_documents(dp:Session = Depends(get_db)):
+    return dp.query(Document).all()
 
 @app.post("/documents/upload",response_model=DocumentResponse,status_code=status.HTTP_201_CREATED)
 async def upload_document(file: UploadFile=File(...),db:Session=Depends(get_db)):
@@ -63,10 +84,7 @@ async def upload_document(file: UploadFile=File(...),db:Session=Depends(get_db))
         
     return doc
 
-@app.get("/documents",response_model=list[DocumentResponse])
-def list_documents(dp:Session = Depends(get_db)):
-    return dp.query(Document).all()
-    
+
 @app.get("/documents/{doc_id}", response_model=DocumentDetailResponse)
 def get_document(doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()

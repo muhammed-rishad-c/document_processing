@@ -1,6 +1,7 @@
 from uuid import UUID
 from datetime import datetime
 from pydantic import BaseModel,ConfigDict
+from typing import List,Dict,Any,Optional
 
 class DocumentStats(BaseModel):
     total_words: int
@@ -40,3 +41,22 @@ class SimilarityResponse(BaseModel):
     doc_id_1: UUID
     doc_id_2: UUID
     similarity_score: float
+    
+class SimilarDocumentMatch(BaseModel):
+    document_id: str
+    filename: str
+    score: float
+    
+class DocumentResponse(BaseModel):
+    id: UUID
+    filename: str
+    file_type: str
+    upload_time: datetime
+    extracted_text: str
+    stats: Dict[str, Any]
+
+    model_config = ConfigDict(from_attributes=True)
+
+class UploadDocumentResponse(BaseModel):
+    document: DocumentResponse
+    similar_documents: List[SimilarDocumentMatch]
