@@ -16,7 +16,7 @@ def extract_text_from_file(file_bytes:bytes,filename:str)->tuple[str,str]:
         
         if filename.endswith(".txt"):
             file_type=".txt"
-            extracted_text=file_bytes.decode("utf-8",errors="ignore")
+            extracted_text=file_bytes.decode("utf-8",errors="ignore").replace("\x00", "")
         elif filename.endswith(".pdf"):
             file_type = ".pdf"
             pdf_file = io.BytesIO(file_bytes)
@@ -26,6 +26,7 @@ def extract_text_from_file(file_bytes:bytes,filename:str)->tuple[str,str]:
                 text = page.extract_text()
                 if text:
                     extracted_text += text + "\n"
+            extracted_text = extracted_text.replace("\x00", "")
         else:
             raise ValueError("Unsupported file type. Only .txt and .pdf are allowed.")
 

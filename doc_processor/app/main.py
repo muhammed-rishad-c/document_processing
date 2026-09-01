@@ -1,15 +1,17 @@
 import os
 from uuid import UUID
-from fastapi import FastAPI,Depends,UploadFile,File,HTTPException,status
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from .database import engine,Base,get_db
+from .database import engine, Base, get_db
 from .models import Document
 from .schemas import (
     DocumentResponse,
     DocumentDetailResponse,
+    UploadDocumentResponse,  # Ensure this schema is defined in schemas.py
     SearchResponse,
     SimilarityRequest,
     SimilarityResponse
@@ -24,11 +26,11 @@ from .vector_store import (
     init_qdrant,
     get_embedding,
     check_similarity,
-    store_vector
+    store_vector,
+    delete_vector
 )
 
 Base.metadata.create_all(bind=engine)
-
 
 app = FastAPI(
     title="Mini Document Processing System",
@@ -36,9 +38,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],  
+    allow_headers=["*"],
+)
+
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 
 @app.on_event("startup")
 def startup_event():
@@ -48,42 +57,55 @@ def startup_event():
 async def read_index():
     return FileResponse("index.html")
 
-@app.get("/documents",response_model=list[DocumentResponse])
-def list_documents(dp:Session = Depends(get_db)):
-    return dp.query(Document).all()
+@app.get("/documents", response_model=list[DocumentResponse])
+def list_documents(db: Session = Depends(get_db)):
+    return db.query(Document).all()
 
-@app.post("/documents/upload",response_model=DocumentResponse,status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile=File(...),db:Session=Depends(get_db)):
+@app.post("/documents/upload", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename:
-        raise HTTPException(status_code=400,detail="Filename cannod be empty")
+        raise HTTPException(status_code=400, detail="Filename cannot be empty")
     
-    file_bytes=await file.read()
+    file_bytes = await file.read()
     if not file_bytes:
-        raise HTTPException(status_code=400,detail="Uploaded file is empty")
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
     
     try:
-        text,file_type=extract_text_from_file(file_bytes,file.filename)
-        stats=calculate_document_stats(text)
+        text, file_type = extract_text_from_file(file_bytes, file.filename)
+        stats = calculate_document_stats(text)
     except ValueError as e:
-        raise HTTPException(status_code=400,detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     
-    doc=Document(
+    embedding = get_embedding(text)
+    similar_docs = check_similarity(embedding, limit=3)
+    
+    doc = Document(
         filename=file.filename,
         file_type=file_type,
         extracted_text=text,
         stats=stats
     )
     
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
+    try:
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500,detail=f"Database error: {str(e)}")
+            
     
-    saved_path=os.path.join(UPLOAD_DIR,f"{doc.id}_{file.filename}")
-    with open(saved_path,"wb") as f:
+    saved_path = os.path.join(UPLOAD_DIR, f"{doc.id}_{file.filename}")
+    with open(saved_path, "wb") as f:
         f.write(file_bytes)
         
-    return doc
-
+    store_vector(str(doc.id), embedding, doc.filename)
+        
+    return {
+        "document_id":doc.id,
+        "document": doc,
+        "similar_documents": similar_docs
+    }
 
 @app.get("/documents/{doc_id}", response_model=DocumentDetailResponse)
 def get_document(doc_id: UUID, db: Session = Depends(get_db)):
@@ -98,13 +120,24 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found.")
 
+    doc_id_str = str(doc.id)
+
+    try:
+        delete_vector(doc_id_str)
+    except Exception:
+        pass
+
     saved_path = os.path.join(UPLOAD_DIR, f"{doc.id}_{doc.filename}")
     if os.path.exists(saved_path):
         os.remove(saved_path)
 
     db.delete(doc)
     db.commit()
-    return {"message": "Document deleted successfully."}
+
+    return {
+        "message": "Document successfully deleted from PostgreSQL, Qdrant, and local storage.",
+        "deleted_id": doc_id_str
+    }
 
 @app.get("/documents/{doc_id}/search", response_model=SearchResponse)
 def search_document(doc_id: UUID, query: str, db: Session = Depends(get_db)):
@@ -118,22 +151,20 @@ def search_document(doc_id: UUID, query: str, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-@app.post("/documents/similarity", response_model=SimilarityResponse)
-def document_similarity(payload: SimilarityRequest, db: Session = Depends(get_db)):
-    doc1 = db.query(Document).filter(Document.id == payload.doc_id_1).first()
-    doc2 = db.query(Document).filter(Document.id == payload.doc_id_2).first()
+# @app.post("/documents/similarity", response_model=SimilarityResponse)
+# def document_similarity(payload: SimilarityRequest, db: Session = Depends(get_db)):
+#     doc1 = db.query(Document).filter(Document.id == payload.doc_id_1).first()
+#     doc2 = db.query(Document).filter(Document.id == payload.doc_id_2).first()
 
-    if not doc1 or not doc2:
-        raise HTTPException(status_code=404, detail="One or both documents were not found.")
+#     if not doc1 or not doc2:
+#         raise HTTPException(status_code=404, detail="One or both documents were not found.")
 
-    try:
-        score = compute_tf_idf_similarity(doc1.extracted_text, doc2.extracted_text)
-        return {
-            "doc_id_1": payload.doc_id_1,
-            "doc_id_2": payload.doc_id_2,
-            "similarity_score": score
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-    
+#     try:
+#         score = compute_tf_idf_similarity(doc1.extracted_text, doc2.extracted_text)
+#         return {
+#             "doc_id_1": payload.doc_id_1,
+#             "doc_id_2": payload.doc_id_2,
+#             "similarity_score": score
+#         }
+#     except ValueError as e:
+#         raise HTTPException(status_code=400, detail=str(e))

@@ -58,5 +58,6 @@ class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class UploadDocumentResponse(BaseModel):
+    document_id: UUID
     document: DocumentResponse
     similar_documents: List[SimilarDocumentMatch]

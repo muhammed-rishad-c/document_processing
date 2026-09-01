@@ -45,3 +45,9 @@ def store_vector(doc_id: str, vector: list[float], filename: str):
             )
         ]
     )
+    
+def delete_vector(doc_id: str):
+    qdrant.delete(
+        collection_name=COLLECTION_NAME,
+        points_selector=[doc_id]
+    )
