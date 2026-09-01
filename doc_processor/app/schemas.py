@@ -1,6 +1,6 @@
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel,ConfigDict
 
 class DocumentStats(BaseModel):
     total_words: int
@@ -8,6 +8,8 @@ class DocumentStats(BaseModel):
     total_sentences: int
     total_paragraphs: int
     top_10_words: dict[str, int]
+    
+    model_config = ConfigDict(from_attributes=True)
     
 class DocumentResponse(BaseModel):
     id: UUID
