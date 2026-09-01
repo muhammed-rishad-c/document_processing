@@ -1,6 +1,6 @@
 import os
 from uuid import UUID
-from fastapi import FastApi,Depends,UploadFile,File,HTTPException,status
+from fastapi import FastAPI,Depends,UploadFile,File,HTTPException,status
 from sqlalchemy.orm import Session
 
 from .database import engine,Base,get_db
