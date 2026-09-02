@@ -1,38 +1,39 @@
-# 📄 Intelligent Document Processor API
+# 📄 Intelligent Document Processor & Vector API
 
-A high-performance, asynchronous RESTful API built with **FastAPI**, **SQLAlchemy**, and **PostgreSQL** designed to ingest, process, extract text, and compute real-time analytical metadata from uploaded documents.
+A high-performance, local-first RESTful API built with **FastAPI**, **SQLAlchemy**, **PostgreSQL**, and **Qdrant** designed to ingest, sanitize, extract text, compute real-time analytical metadata, and perform vector similarity matching on uploaded documents.
 
 ---
 
 ## ✨ Features
 
-* **File Upload & Validation**: Secure ingestion for document formats (e.g., `.txt`, `.pdf`).
-* **Automated Text Analytics**: Instant computation of text metrics including word count, character count, sentence count, paragraph count, and top keyword frequency distributions.
+* **Multi-Format Ingestion & Cleaning**: Support for `.txt` and `.pdf` files with automatic NUL byte (`\x00`) sanitization to prevent database encoding errors.
+* **Automated Text Analytics**: Instant computation of text metrics including total word counts, character counts, average word length, and language statistics.
+* **Vector Similarity Matching (Qdrant)**: Automated dense vector embedding generation using `sentence-transformers` (`all-MiniLM-L6-v2`) with instant semantic similarity searching across stored documents upon upload.
 * **Structured PostgreSQL Storage**: Strongly typed schema modeling utilizing **UUIDs** and native **JSONB** columns for optimized document metadata indexing.
-* **RESTful Endpoints**: Full CRUD operations for document uploading, listing, fetching, text search, and deletion.
-* **Automated Testing Suite**: End-to-end unit and integration testing built with **Pytest** and **HTTPX**.
+* **RESTful Endpoints & Cascading Deletion**: Full CRUD operations for document uploading, listing, fetching, text search, and deletion across PostgreSQL, Qdrant, and local file storage.
+* **Interactive Web Workspace**: Built-in tabbed dark-mode dashboard (`index.html`) for uploading files, inspecting vector scores, searching by UUID, and managing records.
 
 ---
 
 ## 🏗️ Project Architecture & Tech Stack
 
 * **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+)
-* **Database**: [PostgreSQL](https://www.postgresql.org/)
-* **ORM**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/)
+* **Relational Database**: [PostgreSQL](https://www.postgresql.org/) (via SQLAlchemy 2.0 ORM)
+* **Vector Store**: [Qdrant](https://qdrant.tech/) (`qdrant-client`)
+* **Embedding Model**: `sentence-transformers/all-MiniLM-L6-v2`
 * **Data Validation**: [Pydantic V2](https://docs.pydantic.dev/)
-* **Testing**: [Pytest](https://docs.pytest.org/) & `TestClient` / `httpx`
+* **Document Extraction**: `pypdf` & native Python text decoding
 
 ```text
-liquidlab/
-├── doc_processor/
-│   ├── app/
-│   │   ├── database.py   # Database connection & session setup
-│   │   ├── main.py       # FastAPI routing & application entrypoint
-│   │   ├── models.py     # SQLAlchemy ORM models (PostgreSQL)
-│   │   ├── schemas.py    # Pydantic schemas for request/response validation
-│   │   └── utils.py      # Text processing & analytics utilities
-│   └── __init__.py
-├── tests/
-│   └── test_main.py      # Integration and unit tests
+doc_processor/
+├── app/
+│   ├── database.py       # PostgreSQL database connection & session setup
+│   ├── main.py           # FastAPI routing, middleware, & application entrypoint
+│   ├── models.py         # SQLAlchemy ORM models (PostgreSQL)
+│   ├── schemas.py        # Pydantic schemas for request/response validation
+│   ├── service.py        # Text extraction, NUL-byte sanitization, & analytics utilities
+│   ├── vector_store.py   # Qdrant client connection & embedding generation
+│   └── uploads/          # Physical disk storage for raw file uploads
+├── index.html            # Web workspace frontend dashboard
 ├── requirements.txt      # Project dependencies
-└── README.md
+└── README.md             # Project documentation
