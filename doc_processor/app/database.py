@@ -1,6 +1,10 @@
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base,sessionmaker 
+from sqlalchemy.orm import declarative_base,sessionmaker
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 database_url=os.getenv("DATABASE_URL","postgresql://postgres:rishadkhalid@localhost:5432/doc_processing_db")
 

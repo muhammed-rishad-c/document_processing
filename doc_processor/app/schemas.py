@@ -69,3 +69,19 @@ class ChunkSearchResult(BaseModel):
 class SemanticSearchResponse(BaseModel):
     query: str
     results: List[ChunkSearchResult]
+    
+class RAGRequest(BaseModel):
+    query: str
+    top_k: int = 3
+    document_id: Optional[str] = None
+
+class ChunkSource(BaseModel):
+    chunk_id: str
+    document_id: str
+    chunk_index: int
+    similarity_score: float
+
+class RAGResponse(BaseModel):
+    query: str
+    answer: str
+    sources: List[ChunkSource]

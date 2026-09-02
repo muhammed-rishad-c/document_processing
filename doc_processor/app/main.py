@@ -17,7 +17,10 @@ from .schemas import (
     SimilarityRequest,
     SimilarityResponse,
     SemanticSearchResponse,
-    SemanticSearchRequest
+    SemanticSearchRequest,
+    RAGRequest,
+    RAGResponse,
+    ChunkSource
 )
 from .service import (
     extract_text_from_file,
@@ -34,6 +37,10 @@ from .vector_store import (
     store_chunk_vector,
     search_similar_chunks
     
+)
+
+from .llm_service import(
+    generate_rag_answer
 )
 
 Base.metadata.create_all(bind=engine)
@@ -208,4 +215,43 @@ def semantic_search(request: SemanticSearchRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
+    
+
+@app.post("/documents/chat",response_model=RAGResponse)
+def chat_with_document(payload:RAGRequest):
+    try:
+        chunks=search_similar_chunks(
+            query_text=payload.query,
+            top_k=payload.top_k,
+            document_id=payload.document_id
+            
+        )
+        
+        if not chunks:
+            return RAGResponse(
+                query=payload.query,
+                answer="there is no content found in vector database",
+                sources=[]
+            )
+        answer=generate_rag_answer(user_query=payload.query,retrieved_chunks=chunks)
+        sources = [
+            ChunkSource(
+                chunk_id=c["chunk_id"],
+                document_id=c["document_id"],
+                chunk_index=c["chunk_index"],
+                similarity_score=c["similarity_score"]
+            )
+            for c in chunks
+        ]
+
+        return RAGResponse(
+            query=payload.query,
+            answer=answer,
+            sources=sources
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    
     

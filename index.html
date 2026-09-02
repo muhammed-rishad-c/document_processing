@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini Document Processing & Semantic Search</title>
+    <title>Mini Document Processing & RAG Chat Engine</title>
     <style>
         :root {
             --bg-color: #0f172a;
             --card-bg: #1e293b;
             --accent-color: #6366f1;
             --accent-hover: #4f46e5;
+            --gemini-color: #8b5cf6;
+            --gemini-hover: #7c3aed;
             --text-color: #f8fafc;
             --subtext-color: #94a3b8;
             --border-color: #334155;
@@ -29,7 +31,7 @@
             margin: 0 auto;
         }
 
-        h1, h2 {
+        h1, h2, h3 {
             color: var(--text-color);
         }
 
@@ -67,10 +69,19 @@
             cursor: pointer;
             font-weight: 600;
             transition: background-color 0.2s;
+            white-space: nowrap;
         }
 
         button:hover {
             background-color: var(--accent-hover);
+        }
+
+        .btn-gemini {
+            background-color: var(--gemini-color);
+        }
+
+        .btn-gemini:hover {
+            background-color: var(--gemini-hover);
         }
 
         .results-box {
@@ -79,6 +90,16 @@
             border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 1rem;
+        }
+
+        .ai-answer-card {
+            background-color: #2e1065;
+            border: 1px solid #6b21a8;
+            border-left: 5px solid var(--gemini-color);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            border-radius: 6px;
+            line-height: 1.6;
         }
 
         .chunk-card {
@@ -126,11 +147,11 @@
 <body>
 
 <div class="container">
-    <h1>📄 Document Engine & Vector Search</h1>
+    <h1>📄 Document Engine & Gemini RAG</h1>
 
-    <!-- Upload Document Card -->
+    <!-- 1. Upload Document Card -->
     <div class="card">
-        <h2>1. Upload & Processing Pipeline</h2>
+        <h2>1. Upload & Vector Processing</h2>
         <form id="uploadForm">
             <div class="form-group">
                 <input type="file" id="fileInput" required>
@@ -140,20 +161,31 @@
         <div id="uploadStatus"></div>
     </div>
 
-    <!-- Semantic Vector Search Card -->
+    <!-- 2. NEW: Gemini RAG Question Answering Card -->
     <div class="card">
-        <h2>2. Chunk Semantic Search</h2>
+        <h2>2. Ask AI (Gemini RAG)</h2>
         <div class="form-group">
-            <input type="text" id="searchQuery" placeholder="Ask a question or enter a search term..." required>
+            <input type="text" id="ragQuery" placeholder="Ask a question about your uploaded documents..." required>
+            <input type="number" id="ragTopK" value="3" min="1" max="10" style="width: 80px;" title="Context Chunks Limit">
+            <button class="btn-gemini" onclick="performRAGChat()">Ask Gemini ✨</button>
+        </div>
+        <div id="ragResults" class="results-box" style="display: none;"></div>
+    </div>
+
+    <!-- 3. Semantic Vector Search Card -->
+    <div class="card">
+        <h2>3. Raw Chunk Vector Search</h2>
+        <div class="form-group">
+            <input type="text" id="searchQuery" placeholder="Search vector store for specific text..." required>
             <input type="number" id="topK" value="3" min="1" max="10" style="width: 80px;">
-            <button onclick="performSearch()">Search</button>
+            <button onclick="performSearch()">Search Chunks</button>
         </div>
         <div id="searchResults" class="results-box" style="display: none;"></div>
     </div>
 
-    <!-- Stored Documents Card -->
+    <!-- 4. Stored Documents Card -->
     <div class="card">
-        <h2>3. Stored Documents</h2>
+        <h2>4. Stored Documents</h2>
         <button onclick="loadDocuments()">Refresh Document List</button>
         <div id="documentList" style="margin-top: 1rem;"></div>
     </div>
@@ -162,7 +194,7 @@
 <script>
     const API_BASE = "http://localhost:9000";
 
-    // Handle Upload
+    // Handle Document Upload
     document.getElementById("uploadForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         const fileInput = document.getElementById("fileInput");
@@ -192,6 +224,55 @@
             statusDiv.innerHTML = `<p style="color: #ef4444;">Upload failed: ${err.message}</p>`;
         }
     });
+
+    // Handle Gemini RAG Chat
+    async function performRAGChat() {
+        const query = document.getElementById("ragQuery").value.trim();
+        const topK = parseInt(document.getElementById("ragTopK").value);
+        const resultsDiv = document.getElementById("ragResults");
+
+        if (!query) return;
+
+        resultsDiv.style.display = "block";
+        resultsDiv.innerHTML = "<p>🔍 Retrieving vector chunks & generating response with Gemini...</p>";
+
+        try {
+            const response = await fetch(`${API_BASE}/documents/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: query, top_k: topK })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                let htmlContent = `
+                    <div class="ai-answer-card">
+                        <h3 style="margin-top: 0; color: #c084fc;">🤖 Gemini Answer:</h3>
+                        <div>${data.answer.replace(/\n/g, '<br>')}</div>
+                    </div>
+                    <h3>Reference Sources Used (${data.sources.length}):</h3>
+                `;
+
+                data.sources.forEach(src => {
+                    htmlContent += `
+                        <div class="chunk-card">
+                            <div class="chunk-meta">
+                                <span>Doc ID: ${src.document_id} (Chunk #${src.chunk_index})</span>
+                                <span class="score-badge">Score: ${src.similarity_score}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                resultsDiv.innerHTML = htmlContent;
+            } else {
+                resultsDiv.innerHTML = `<p style="color: #ef4444;">Error: ${data.detail}</p>`;
+            }
+        } catch (err) {
+            resultsDiv.innerHTML = `<p style="color: #ef4444;">RAG Chat failed: ${err.message}</p>`;
+        }
+    }
 
     // Handle Semantic Search
     async function performSearch() {
