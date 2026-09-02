@@ -233,7 +233,10 @@ def chat_with_document(payload:RAGRequest):
                 answer="there is no content found in vector database",
                 sources=[]
             )
-        answer=generate_rag_answer(user_query=payload.query,retrieved_chunks=chunks)
+        answer_result = generate_rag_answer(
+            user_query=payload.query,
+            retrieved_chunks=chunks
+        )
         sources = [
             ChunkSource(
                 chunk_id=c["chunk_id"],
@@ -246,7 +249,7 @@ def chat_with_document(payload:RAGRequest):
 
         return RAGResponse(
             query=payload.query,
-            answer=answer,
+            answer=answer_result["text"],
             sources=sources
         )
 
