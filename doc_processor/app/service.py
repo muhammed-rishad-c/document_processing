@@ -89,16 +89,16 @@ def search_text_in_document(text: str, query: str) -> dict:
         raise ValueError(f"error occurred during search execution: {str(e)}")
 
 
-def compute_tf_idf_similarity(text1: str, text2: str) -> float:
-    try:
-        if not text1.strip() or not text2.strip():
-            raise ValueError("Input texts for similarity cannot be empty.")
+# def compute_tf_idf_similarity(text1: str, text2: str) -> float:
+#     try:
+#         if not text1.strip() or not text2.strip():
+#             raise ValueError("Input texts for similarity cannot be empty.")
             
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform([text1, text2])
-        score = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-        return float(round(score, 4))
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"failed to compute similarity: {str(e)}")
+#         vectorizer = TfidfVectorizer()
+#         tfidf_matrix = vectorizer.fit_transform([text1, text2])
+#         score = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+#         return float(round(score, 4))
+#     except ValueError:
+#         raise
+#     except Exception as e:
+#         raise ValueError(f"failed to compute similarity: {str(e)}")
