@@ -10,4 +10,5 @@ python-multipart
 qdrant-client
 sentence-transformers
 streamlit
+tiktoken
 

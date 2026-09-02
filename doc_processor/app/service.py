@@ -5,6 +5,12 @@ from pypdf import PdfReader
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+import tiktoken
+
+TOKENIZER_ENCODING="cl100k_base"
+tokenizer=tiktoken.get_encoding(TOKENIZER_ENCODING)
+
+
 STOP_WORDS = {
     "a", "about", "an", "and", "are", "as", "at", "be", "by", "for",
     "from", "has", "he", "in", "is", "it", "its", "of", "on", "that",
@@ -89,16 +95,45 @@ def search_text_in_document(text: str, query: str) -> dict:
         raise ValueError(f"error occurred during search execution: {str(e)}")
 
 
-# def compute_tf_idf_similarity(text1: str, text2: str) -> float:
-#     try:
-#         if not text1.strip() or not text2.strip():
-#             raise ValueError("Input texts for similarity cannot be empty.")
-            
-#         vectorizer = TfidfVectorizer()
-#         tfidf_matrix = vectorizer.fit_transform([text1, text2])
-#         score = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-#         return float(round(score, 4))
-#     except ValueError:
-#         raise
-#     except Exception as e:
-#         raise ValueError(f"failed to compute similarity: {str(e)}")
+def count_token(text:str)->int:
+    return len(tokenizer.encode(text))
+
+def chunk_text(text:str,max_chunk_size:int=300,chunk_overlap:int=50)->list[dict]:
+    
+    tokens=tokenizer.encode(text)
+    total_token=len(tokens)
+    
+    if total_token==0:
+        return []
+    
+    chunks=[]
+    chunk_index=0
+    start_idx=0
+    
+    step=max_chunk_size-chunk_overlap
+    if step<=0:
+        raise ValueError("max chunk size is less than overlap size")
+    
+    while start_idx<total_token:
+        
+        end_idx=min(start_idx+max_chunk_size,total_token)
+        chunk_tokens=tokens[start_idx:end_idx]
+        chunk_text_str=tokenizer.decode(chunk_tokens)
+        
+        chunks.append({
+            "chunk_index":chunk_index,
+            "chunk_text":chunk_text_str,
+            "token_count":len(chunk_tokens)
+        })
+        
+        chunk_index+=1
+        if end_idx>=total_token:
+            break
+        
+        start_idx+=step
+        
+    return chunks
+    
+    
+    
+

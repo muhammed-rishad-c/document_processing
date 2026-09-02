@@ -24,18 +24,23 @@ class DocumentResponse(BaseModel):
         
 class DocumentDetailResponse(DocumentResponse):
     extracted_text: str
+    
+class DocumentUploadResponse(BaseModel):
+    document_id: UUID
+    filename: str
+    total_chunks: int
+    stats: Dict[str, Any]
+    message: str
 
 
 class SearchResponse(BaseModel):
     query: str
     occurrences: int
-    matching_sentences: list[str]
-
+    matching_sentences: List[str]
 
 class SimilarityRequest(BaseModel):
     doc_id_1: UUID
     doc_id_2: UUID
-
 
 class SimilarityResponse(BaseModel):
     doc_id_1: UUID
@@ -46,18 +51,21 @@ class SimilarDocumentMatch(BaseModel):
     document_id: str
     filename: str
     score: float
-    
-class DocumentResponse(BaseModel):
-    id: UUID
-    filename: str
-    file_type: str
-    upload_time: datetime
-    extracted_text: str
-    stats: Dict[str, Any]
 
-    model_config = ConfigDict(from_attributes=True)
 
-class UploadDocumentResponse(BaseModel):
+class SemanticSearchRequest(BaseModel):
+    query: str
+    top_k: Optional[int] = 3
+    document_id: Optional[UUID] = None 
+
+class ChunkSearchResult(BaseModel):
+    chunk_id: UUID
     document_id: UUID
-    document: DocumentResponse
-    similar_documents: List[SimilarDocumentMatch]
+    chunk_index: int
+    chunk_text: str
+    token_count: int
+    similarity_score: float
+
+class SemanticSearchResponse(BaseModel):
+    query: str
+    results: List[ChunkSearchResult]
