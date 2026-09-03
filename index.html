@@ -33,7 +33,7 @@
             margin: 0 auto;
         }
 
-        h1, h2, h3 {
+        h1, h2, h3, h4 {
             color: var(--text-color);
         }
 
@@ -189,7 +189,6 @@
         .session-info {
             font-size: 0.85rem;
             color: var(--subtext-color);
-            margin-top: 0.5rem;
         }
     </style>
 </head>
@@ -213,14 +212,22 @@
     <!-- 2. Stateful Conversational RAG Chat Card -->
     <div class="card">
         <h2>2. Conversational Chat (RAG with Memory)</h2>
+        
+        <!-- Mode & Session Controls -->
         <div class="form-group">
-            <button onclick="createNewSession()">➕ New Chat Session</button>
-            <div class="session-info" id="currentSessionDisplay">Active Session: None (Click New Chat)</div>
+            <select id="chatModeSelect" onchange="handleModeChange()">
+                <option value="single">Option 1: Single Active Session</option>
+                <option value="all">Option 2: All Sessions Combined (Global History)</option>
+            </select>
+            <button id="newSessionBtn" onclick="createNewSession()">➕ New Chat Session</button>
+        </div>
+        <div class="session-info" id="currentSessionDisplay" style="margin-bottom: 1rem;">
+            Active Session: None (Click New Chat or Send a message)
         </div>
 
         <!-- Chat History Thread Box -->
         <div id="chatThread" class="chat-box">
-            <div style="color: var(--subtext-color); text-align: center; margin-auto: auto;">
+            <div style="color: var(--subtext-color); text-align: center; margin: auto;">
                 Start a session and enter a prompt to begin conversing.
             </div>
         </div>
@@ -289,7 +296,33 @@
         }
     });
 
-    // 1. Create a New Session
+    // Handle Dropdown Selection Change
+    function handleModeChange() {
+        const mode = document.getElementById("chatModeSelect").value;
+        const newBtn = document.getElementById("newSessionBtn");
+        const display = document.getElementById("currentSessionDisplay");
+        const threadDiv = document.getElementById("chatThread");
+        
+        threadDiv.innerHTML = "";
+        document.getElementById("ragSources").innerHTML = "";
+
+        if (mode === "all") {
+            newBtn.style.display = "none";
+            display.innerText = "Mode: All Sessions Combined (Retrieving context across all saved sessions)";
+            loadAllSessionsMessages();
+        } else {
+            newBtn.style.display = "inline-block";
+            if (activeSessionId) {
+                display.innerText = `Active Session: ${activeSessionId}`;
+                loadSessionMessages(activeSessionId);
+            } else {
+                display.innerText = "Active Session: None (Click New Chat)";
+                threadDiv.innerHTML = `<div style="color: var(--subtext-color); text-align: center; margin: auto;">Start a session and enter a prompt to begin conversing.</div>`;
+            }
+        }
+    }
+
+    // 1. Create a New Session (Single Mode)
     async function createNewSession() {
         try {
             const response = await fetch(`${API_BASE}/chats`, {
@@ -312,7 +345,7 @@
         }
     }
 
-    // 2. Fetch and Render Past Messages in Active Session
+    // Load Single Session Messages
     async function loadSessionMessages(sessionId) {
         try {
             const response = await fetch(`${API_BASE}/chats/${sessionId}/messages`);
@@ -330,14 +363,42 @@
         }
     }
 
-    function appendMessageToThread(role, text) {
+    // Load Combined Messages from All Sessions
+    async function loadAllSessionsMessages() {
+        try {
+            const response = await fetch(`${API_BASE}/chats/messages/all`);
+            if (response.ok) {
+                const messages = await response.json();
+                const threadDiv = document.getElementById("chatThread");
+                threadDiv.innerHTML = "";
+
+                if (messages.length === 0) {
+                    threadDiv.innerHTML = `<div style="color: var(--subtext-color); text-align: center; margin: auto;">No previous messages found across any session.</div>`;
+                    return;
+                }
+
+                messages.forEach(msg => {
+                    appendMessageToThread(msg.role, msg.content, msg.session_id);
+                });
+            }
+        } catch (err) {
+            console.error("Failed to load all sessions history", err);
+        }
+    }
+
+    function appendMessageToThread(role, text, sessionId = null) {
         const threadDiv = document.getElementById("chatThread");
         const msgDiv = document.createElement("div");
         msgDiv.className = `chat-message ${role}`;
 
         const labelDiv = document.createElement("div");
         labelDiv.className = "role-label";
-        labelDiv.innerText = role === "user" ? "You" : "Gemini";
+        
+        let labelText = role === "user" ? "You" : "Gemini";
+        if (sessionId) {
+            labelText += ` (Session: ${sessionId})`;
+        }
+        labelDiv.innerText = labelText;
 
         const contentDiv = document.createElement("div");
         contentDiv.innerHTML = text.replace(/\n/g, "<br>");
@@ -346,46 +407,48 @@
         msgDiv.appendChild(contentDiv);
         threadDiv.appendChild(msgDiv);
 
-        // Auto scroll to bottom
         threadDiv.scrollTop = threadDiv.scrollHeight;
     }
 
-    // 3. Perform Stateful Chat with Memory
+    // Perform Stateful RAG Chat
     async function performStatefulChat() {
         const queryInput = document.getElementById("ragQuery");
         const query = queryInput.value.trim();
         const topK = parseInt(document.getElementById("ragTopK").value);
         const sourcesDiv = document.getElementById("ragSources");
+        const mode = document.getElementById("chatModeSelect").value;
 
         if (!query) return;
 
-        // Create a new session on the fly if none is active
-        if (!activeSessionId) {
+        if (mode === "single" && !activeSessionId) {
             await createNewSession();
         }
 
-        // Show user message immediately in chat thread
-        appendMessageToThread("user", query);
+        appendMessageToThread("user", query, mode === "all" ? "Combined" : null);
         queryInput.value = "";
+
+        const payload = {
+            query: query,
+            top_k: topK,
+            mode: mode
+        };
+
+        if (mode === "single") {
+            payload.session_id = activeSessionId;
+        }
 
         try {
             const response = await fetch(`${API_BASE}/documents/chat-memory`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    session_id: activeSessionId,
-                    query: query,
-                    top_k: topK
-                })
+                body: JSON.stringify(payload)
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                // Append assistant response to chat thread
-                appendMessageToThread("assistant", data.answer);
+                appendMessageToThread("assistant", data.answer, mode === "all" ? "Combined" : null);
 
-                // Render Source References below
                 let sourcesHtml = `<h4>Reference Sources (${data.sources.length}):</h4>`;
                 data.sources.forEach(src => {
                     sourcesHtml += `
