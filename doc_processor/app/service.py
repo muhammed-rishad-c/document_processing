@@ -1,7 +1,7 @@
 import io
 import re
 from collections import Counter
-from pypdf import PdfReader
+import fitz
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -25,14 +25,14 @@ def extract_text_from_file(file_bytes:bytes,filename:str)->tuple[str,str]:
             extracted_text=file_bytes.decode("utf-8",errors="ignore").replace("\x00", "")
         elif filename.endswith(".pdf"):
             file_type = ".pdf"
-            pdf_file = io.BytesIO(file_bytes)
-            reader = PdfReader(pdf_file)
             extracted_text = ""
-            for page in reader.pages:
-                text = page.extract_text()
-                if text:
-                    extracted_text += text + "\n"
-            extracted_text = extracted_text.replace("\x00", "")
+            
+            with fitz.open(stream=file_bytes,filetype="pdf") as doc:
+                for page in doc:
+                    text=page.get_text("text")
+                    if text:
+                        extracted_text+=text+"\n"
+            extracted_text=extracted_text.replace("\x00","")
         else:
             raise ValueError("Unsupported file type. Only .txt and .pdf are allowed.")
 

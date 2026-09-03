@@ -2,7 +2,6 @@ fastapi
 uvicorn
 sqlalchemy
 psycog2-binary
-pypdf
 pytest
 httpx
 scikit-learn
@@ -12,4 +11,5 @@ sentence-transformers
 streamlit
 tiktoken
 openai
+pymupdf
 
