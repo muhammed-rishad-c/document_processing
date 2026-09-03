@@ -68,9 +68,7 @@ def calculate_document_stats(text: str) -> dict:
             "total_paragraphs": paragraph_count,
             "top_10_words": top_10_words
         }
-        return {
-            
-        }
+        
     except Exception as e:
         raise ValueError(f"Failed to calculate document statistics: {str(e)}")
 
