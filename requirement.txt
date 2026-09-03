@@ -11,5 +11,5 @@ qdrant-client
 sentence-transformers
 streamlit
 tiktoken
-google-genai
+openai
 

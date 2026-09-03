@@ -37,9 +37,7 @@ def store_chunk_vector(chunks_data:list[dict]):
     qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
     
 def delete_vector(doc_id: str):
-    """
-    Deletes all chunk vectors belonging to a parent document ID.
-    """
+
     qdrant.delete(
         collection_name=COLLECTION_NAME,
         points_selector=Filter(
@@ -56,23 +54,23 @@ def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = No
     query_vector = get_embedding(query_text)
     
     query_filter = None
-    if document_id:
+    
+    if document_id and str(document_id).strip().lower() not in ["", "null", "undefined", "none"]:
         query_filter = Filter(
             must=[
                 FieldCondition(
                     key="document_id",
-                    match=MatchValue(value=str(document_id))
+                    match=MatchValue(value=str(document_id).strip())
                 )
             ]
         )
 
     try:
-        
         if hasattr(qdrant, "query_points"):
             response = qdrant.query_points(
                 collection_name=COLLECTION_NAME,
                 query=query_vector,
-                query_filter=query_filter,
+                query_filter=query_filter,  
                 limit=top_k,
                 with_payload=True
             )
@@ -93,10 +91,10 @@ def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = No
     for point in points:
         results.append({
             "chunk_id": str(point.id),
-            "document_id": point.payload.get("document_id"),
-            "chunk_index": point.payload.get("chunk_index"),
-            "chunk_text": point.payload.get("chunk_text"),
-            "token_count": point.payload.get("token_count"),
+            "document_id": str(point.payload.get("document_id")),
+            "chunk_index": int(point.payload.get("chunk_index", 0)),
+            "chunk_text": str(point.payload.get("chunk_text", "")),
+            "token_count": int(point.payload.get("token_count", 0)),
             "similarity_score": round(float(point.score), 4)
         })
 

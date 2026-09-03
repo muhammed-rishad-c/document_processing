@@ -1,13 +1,17 @@
 import os
-from google import genai
+from openai import OpenAI
 from dotenv import load_dotenv
+from .service import count_token
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPEN_API_KEY")
+)
 
 MAX_CONTEXT_TOKENS = 4000 
-MODEL_NAME = "gemini-3.6-flash"
+MODEL_NAME = "openrouter/free"
 
 def build_safe_context(retrieved_chunks: list[dict], query_text: str) -> tuple[str, int]:
     """
@@ -20,10 +24,7 @@ def build_safe_context(retrieved_chunks: list[dict], query_text: str) -> tuple[s
     for idx, chunk in enumerate(retrieved_chunks, 1):
         chunk_text = f"\n--- Chunk {idx} (Doc ID: {chunk['document_id']}) ---\n{chunk['chunk_text']}\n"
         
-        token_count = client.models.count_tokens(
-            model=MODEL_NAME,
-            contents=chunk_text
-        ).total_tokens
+        token_count=count_token(chunk_text)
 
         if current_tokens + token_count > MAX_CONTEXT_TOKENS:
             print(f"Token limit target reached. Omitting remaining chunks starting from index {idx}.")
@@ -39,28 +40,33 @@ def build_safe_context(retrieved_chunks: list[dict], query_text: str) -> tuple[s
 def generate_rag_answer(user_query: str, retrieved_chunks: list[dict]) -> dict:
     context_str, context_token_count = build_safe_context(retrieved_chunks, user_query)
 
-    full_prompt = f"""You are an expert AI assistant answering questions based strictly on retrieved context.
+    system_prompt = """You are an expert AI assistant answering questions based strictly on retrieved context.
 Rules:
 1. Use ONLY the provided context chunks to answer the user's question.
 2. If the answer cannot be found in the context, explicitly state: "I cannot find the answer in the provided document context."
-3. Keep the response concise, factual, and direct.
+3. Keep the response concise, factual, and direct."""
 
-Context:
-{context_str}
+    user_content = f"Context:\n{context_str}\n\nQuestion: {user_query}"
 
-Question: {user_query}
-"""
-
-    response = client.models.generate_content(
+    response = client.chat.completions.create(
         model=MODEL_NAME,
-        contents=full_prompt
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ],
+        extra_headers={
+            "HTTP-Referer": "http://localhost:8000",
+            "X-Title": "Document RAG App"
+        },
+        temperature=0.3
     )
-
-    prompt_tokens = response.usage_metadata.prompt_token_count if response.usage_metadata else 0
-    output_tokens = response.usage_metadata.candidates_token_count if response.usage_metadata else 0
+    usage = response.usage
+    prompt_tokens = usage.prompt_tokens if usage else 0
+    output_tokens = usage.completion_tokens if usage else 0
+    
 
     return {
-        "text": response.text,
+        "text": response.choices[0].message.content,
         "input_tokens": prompt_tokens,
         "output_tokens": output_tokens
     }

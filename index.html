@@ -134,6 +134,22 @@
             border-bottom: 1px solid var(--border-color);
         }
 
+        .stats-pills {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-pill {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: var(--subtext-color);
+        }
+
         .delete-btn {
             background-color: #ef4444;
             padding: 0.4rem 0.8rem;
@@ -161,7 +177,7 @@
         <div id="uploadStatus"></div>
     </div>
 
-    <!-- 2. NEW: Gemini RAG Question Answering Card -->
+    <!-- 2. Gemini RAG Question Answering Card -->
     <div class="card">
         <h2>2. Ask AI (Gemini RAG)</h2>
         <div class="form-group">
@@ -329,15 +345,29 @@
                 return;
             }
 
-            listDiv.innerHTML = docs.map(doc => `
-                <div class="document-list-item">
-                    <div>
-                        <strong>${doc.filename}</strong> (${doc.file_type})<br>
-                        <small style="color: var(--subtext-color);">ID: ${doc.id} | Words: ${doc.stats.word_count}</small>
+            listDiv.innerHTML = docs.map(doc => {
+                const stats = doc.stats || {};
+                const words = stats.total_words ?? 0;
+                const chars = stats.total_characters ?? 0;
+                const sentences = stats.total_sentences ?? 0;
+                const paragraphs = stats.total_paragraphs ?? 0;
+
+                return `
+                    <div class="document-list-item">
+                        <div>
+                            <strong>${doc.filename}</strong> (${doc.file_type})<br>
+                            <small style="color: var(--subtext-color);">ID: ${doc.id}</small>
+                            <div class="stats-pills">
+                                <span class="stat-pill">📝 Words: ${words}</span>
+                                <span class="stat-pill">🔤 Chars: ${chars}</span>
+                                <span class="stat-pill">💬 Sentences: ${sentences}</span>
+                                <span class="stat-pill">📄 Paragraphs: ${paragraphs}</span>
+                            </div>
+                        </div>
+                        <button class="delete-btn" onclick="deleteDocument('${doc.id}')">Delete</button>
                     </div>
-                    <button class="delete-btn" onclick="deleteDocument('${doc.id}')">Delete</button>
-                </div>
-            `).join("");
+                `;
+            }).join("");
         } catch (err) {
             listDiv.innerHTML = `<p style="color: #ef4444;">Failed to load documents.</p>`;
         }
