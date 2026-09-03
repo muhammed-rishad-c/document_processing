@@ -2,13 +2,19 @@ import os
 from uuid import UUID
 import uuid
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status
+from fastapi import APIRouter,Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .database import engine, Base, get_db
-from .models import Document,DocumentChunk
+from .models import (
+    Document,
+    DocumentChunk,
+    ChatSession,
+    ChatMessage
+)
 from .schemas import (
     DocumentResponse,
     DocumentDetailResponse,
@@ -20,7 +26,12 @@ from .schemas import (
     SemanticSearchRequest,
     RAGRequest,
     RAGResponse,
-    ChunkSource
+    ChunkSource,
+    ChatSessionCreate, 
+    ChatSessionResponse, 
+    ChatMessageResponse, 
+    MemoryRAGRequest, 
+    MemoryRAGResponse
 )
 from .service import (
     extract_text_from_file,
@@ -40,7 +51,8 @@ from .vector_store import (
 )
 
 from .llm_service import(
-    generate_rag_answer
+    generate_rag_answer,
+    generate_rag_answer_with_memory,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -255,6 +267,105 @@ def chat_with_document(payload:RAGRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    
+@app.post("/chats", response_model=ChatSessionResponse, status_code=status.HTTP_201_CREATED)
+def create_chat_session(payload: ChatSessionCreate, db: Session = Depends(get_db)):
+    doc_uuid = UUID(payload.document_id) if payload.document_id else None
+    
+    session = ChatSession(
+        title=payload.title,
+        document_id=doc_uuid
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@app.get("/chats/{session_id}/messages", response_model=list[ChatMessageResponse])
+def get_chat_messages(session_id: UUID, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+        
+    messages = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    return messages
+
+@app.post("/documents/chat-memory", response_model=MemoryRAGResponse)
+def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
+    
+    session = db.query(ChatSession).filter(ChatSession.id == payload.session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    
+    recent_messages = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == payload.session_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    
+    chronological_history = list(reversed(recent_messages))
+    history_payload = [{"role": msg.role, "content": msg.content} for msg in chronological_history]
+
+    
+    user_msg = ChatMessage(
+        session_id=payload.session_id,
+        role="user",
+        content=payload.query
+    )
+    db.add(user_msg)
+    db.commit()
+
+    
+    target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
+    retrieved_chunks = search_similar_chunks(
+        query_text=payload.query,
+        top_k=payload.top_k,
+        document_id=target_doc_id
+    )
+
+    
+    llm_result = generate_rag_answer_with_memory(
+        user_query=payload.query,
+        retrieved_chunks=retrieved_chunks,
+        chat_history=history_payload
+    )
+
+    
+    assistant_msg = ChatMessage(
+        session_id=payload.session_id,
+        role="assistant",
+        content=llm_result["text"]
+    )
+    db.add(assistant_msg)
+    db.commit()
+
+    
+    formatted_sources = [
+        ChunkSource(
+            chunk_id=str(c.get("chunk_id", "")),
+            document_id=str(c.get("document_id", "")),
+            chunk_index=c.get("chunk_index", 0),
+            similarity_score=float(c.get("similarity_score", 0.0))
+        )
+        for c in retrieved_chunks
+    ]
+
+    return MemoryRAGResponse(
+        session_id=payload.session_id,
+        query=payload.query,
+        answer=llm_result["text"],
+        sources=formatted_sources
+    )
     
     
     

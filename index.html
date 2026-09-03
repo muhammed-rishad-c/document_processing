@@ -16,6 +16,8 @@
             --subtext-color: #94a3b8;
             --border-color: #334155;
             --success-color: #10b981;
+            --user-msg-bg: #1e3a8a;
+            --bot-msg-bg: #2e1065;
         }
 
         body {
@@ -51,7 +53,7 @@
             align-items: center;
         }
 
-        input[type="file"], input[type="text"], input[type="number"] {
+        input[type="file"], input[type="text"], input[type="number"], select {
             background-color: var(--bg-color);
             border: 1px solid var(--border-color);
             color: var(--text-color);
@@ -84,22 +86,47 @@
             background-color: var(--gemini-hover);
         }
 
-        .results-box {
-            margin-top: 1rem;
+        /* Conversational Chat Box Styles */
+        .chat-box {
             background-color: var(--bg-color);
             border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 1rem;
+            height: 380px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1rem;
         }
 
-        .ai-answer-card {
-            background-color: #2e1065;
+        .chat-message {
+            max-width: 80%;
+            padding: 0.85rem 1.1rem;
+            border-radius: 8px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .chat-message.user {
+            align-self: flex-end;
+            background-color: var(--user-msg-bg);
+            border: 1px solid #2563eb;
+            color: #ffffff;
+        }
+
+        .chat-message.assistant {
+            align-self: flex-start;
+            background-color: var(--bot-msg-bg);
             border: 1px solid #6b21a8;
-            border-left: 5px solid var(--gemini-color);
-            padding: 1.25rem;
-            margin-bottom: 1.5rem;
-            border-radius: 6px;
-            line-height: 1.6;
+            color: #ffffff;
+        }
+
+        .chat-message .role-label {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: var(--subtext-color);
+            margin-bottom: 0.25rem;
         }
 
         .chunk-card {
@@ -158,6 +185,12 @@
         .delete-btn:hover {
             background-color: #dc2626;
         }
+
+        .session-info {
+            font-size: 0.85rem;
+            color: var(--subtext-color);
+            margin-top: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -177,15 +210,29 @@
         <div id="uploadStatus"></div>
     </div>
 
-    <!-- 2. Gemini RAG Question Answering Card -->
+    <!-- 2. Stateful Conversational RAG Chat Card -->
     <div class="card">
-        <h2>2. Ask AI (Gemini RAG)</h2>
+        <h2>2. Conversational Chat (RAG with Memory)</h2>
         <div class="form-group">
-            <input type="text" id="ragQuery" placeholder="Ask a question about your uploaded documents..." required>
-            <input type="number" id="ragTopK" value="3" min="1" max="10" style="width: 80px;" title="Context Chunks Limit">
-            <button class="btn-gemini" onclick="performRAGChat()">Ask Gemini ✨</button>
+            <button onclick="createNewSession()">➕ New Chat Session</button>
+            <div class="session-info" id="currentSessionDisplay">Active Session: None (Click New Chat)</div>
         </div>
-        <div id="ragResults" class="results-box" style="display: none;"></div>
+
+        <!-- Chat History Thread Box -->
+        <div id="chatThread" class="chat-box">
+            <div style="color: var(--subtext-color); text-align: center; margin-auto: auto;">
+                Start a session and enter a prompt to begin conversing.
+            </div>
+        </div>
+
+        <div class="form-group">
+            <input type="text" id="ragQuery" placeholder="Ask follow-up questions..." required>
+            <input type="number" id="ragTopK" value="3" min="1" max="10" style="width: 80px;" title="Context Chunks Limit">
+            <button class="btn-gemini" onclick="performStatefulChat()">Send ✨</button>
+        </div>
+        
+        <!-- Sources Container -->
+        <div id="ragSources" style="margin-top: 1rem;"></div>
     </div>
 
     <!-- 3. Semantic Vector Search Card -->
@@ -196,7 +243,7 @@
             <input type="number" id="topK" value="3" min="1" max="10" style="width: 80px;">
             <button onclick="performSearch()">Search Chunks</button>
         </div>
-        <div id="searchResults" class="results-box" style="display: none;"></div>
+        <div id="searchResults" style="display: none;" class="chat-box"></div>
     </div>
 
     <!-- 4. Stored Documents Card -->
@@ -209,6 +256,7 @@
 
 <script>
     const API_BASE = "http://localhost:9000";
+    let activeSessionId = null;
 
     // Handle Document Upload
     document.getElementById("uploadForm").addEventListener("submit", async (e) => {
@@ -241,37 +289,106 @@
         }
     });
 
-    // Handle Gemini RAG Chat
-    async function performRAGChat() {
-        const query = document.getElementById("ragQuery").value.trim();
+    // 1. Create a New Session
+    async function createNewSession() {
+        try {
+            const response = await fetch(`${API_BASE}/chats`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: `Session ${new Date().toLocaleTimeString()}` })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                activeSessionId = data.id;
+                document.getElementById("currentSessionDisplay").innerText = `Active Session: ${activeSessionId}`;
+                document.getElementById("chatThread").innerHTML = "";
+                document.getElementById("ragSources").innerHTML = "";
+            } else {
+                alert("Failed to create chat session.");
+            }
+        } catch (err) {
+            alert("Error creating session: " + err.message);
+        }
+    }
+
+    // 2. Fetch and Render Past Messages in Active Session
+    async function loadSessionMessages(sessionId) {
+        try {
+            const response = await fetch(`${API_BASE}/chats/${sessionId}/messages`);
+            if (response.ok) {
+                const messages = await response.json();
+                const threadDiv = document.getElementById("chatThread");
+                threadDiv.innerHTML = "";
+
+                messages.forEach(msg => {
+                    appendMessageToThread(msg.role, msg.content);
+                });
+            }
+        } catch (err) {
+            console.error("Failed to load chat history", err);
+        }
+    }
+
+    function appendMessageToThread(role, text) {
+        const threadDiv = document.getElementById("chatThread");
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `chat-message ${role}`;
+
+        const labelDiv = document.createElement("div");
+        labelDiv.className = "role-label";
+        labelDiv.innerText = role === "user" ? "You" : "Gemini";
+
+        const contentDiv = document.createElement("div");
+        contentDiv.innerHTML = text.replace(/\n/g, "<br>");
+
+        msgDiv.appendChild(labelDiv);
+        msgDiv.appendChild(contentDiv);
+        threadDiv.appendChild(msgDiv);
+
+        // Auto scroll to bottom
+        threadDiv.scrollTop = threadDiv.scrollHeight;
+    }
+
+    // 3. Perform Stateful Chat with Memory
+    async function performStatefulChat() {
+        const queryInput = document.getElementById("ragQuery");
+        const query = queryInput.value.trim();
         const topK = parseInt(document.getElementById("ragTopK").value);
-        const resultsDiv = document.getElementById("ragResults");
+        const sourcesDiv = document.getElementById("ragSources");
 
         if (!query) return;
 
-        resultsDiv.style.display = "block";
-        resultsDiv.innerHTML = "<p>🔍 Retrieving vector chunks & generating response with Gemini...</p>";
+        // Create a new session on the fly if none is active
+        if (!activeSessionId) {
+            await createNewSession();
+        }
+
+        // Show user message immediately in chat thread
+        appendMessageToThread("user", query);
+        queryInput.value = "";
 
         try {
-            const response = await fetch(`${API_BASE}/documents/chat`, {
+            const response = await fetch(`${API_BASE}/documents/chat-memory`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: query, top_k: topK })
+                body: JSON.stringify({
+                    session_id: activeSessionId,
+                    query: query,
+                    top_k: topK
+                })
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                let htmlContent = `
-                    <div class="ai-answer-card">
-                        <h3 style="margin-top: 0; color: #c084fc;">🤖 Gemini Answer:</h3>
-                        <div>${data.answer.replace(/\n/g, '<br>')}</div>
-                    </div>
-                    <h3>Reference Sources Used (${data.sources.length}):</h3>
-                `;
+                // Append assistant response to chat thread
+                appendMessageToThread("assistant", data.answer);
 
+                // Render Source References below
+                let sourcesHtml = `<h4>Reference Sources (${data.sources.length}):</h4>`;
                 data.sources.forEach(src => {
-                    htmlContent += `
+                    sourcesHtml += `
                         <div class="chunk-card">
                             <div class="chunk-meta">
                                 <span>Doc ID: ${src.document_id} (Chunk #${src.chunk_index})</span>
@@ -280,13 +397,12 @@
                         </div>
                     `;
                 });
-
-                resultsDiv.innerHTML = htmlContent;
+                sourcesDiv.innerHTML = sourcesHtml;
             } else {
-                resultsDiv.innerHTML = `<p style="color: #ef4444;">Error: ${data.detail}</p>`;
+                appendMessageToThread("assistant", `❌ Error: ${data.detail}`);
             }
         } catch (err) {
-            resultsDiv.innerHTML = `<p style="color: #ef4444;">RAG Chat failed: ${err.message}</p>`;
+            appendMessageToThread("assistant", `❌ Request failed: ${err.message}`);
         }
     }
 

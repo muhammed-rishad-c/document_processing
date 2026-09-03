@@ -1,7 +1,7 @@
 import io
 import re
 from collections import Counter
-import fitz
+import pymupdf as fitz
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 

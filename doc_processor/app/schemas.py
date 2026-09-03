@@ -53,18 +53,20 @@ class SimilarDocumentMatch(BaseModel):
     score: float
 
 
-class SemanticSearchRequest(BaseModel):
-    query: str
-    top_k: Optional[int] = 3
-    document_id: Optional[UUID] = None 
+
 
 class ChunkSearchResult(BaseModel):
-    chunk_id: UUID
-    document_id: UUID
+    chunk_id: str
+    document_id: str
     chunk_index: int
     chunk_text: str
     token_count: int
     similarity_score: float
+    
+class SemanticSearchRequest(BaseModel):
+    query: str
+    top_k: Optional[int] = 3
+    document_id: Optional[str] = None 
 
 class SemanticSearchResponse(BaseModel):
     query: str
@@ -74,14 +76,50 @@ class RAGRequest(BaseModel):
     query: str
     top_k: int = 3
     document_id: Optional[str] = None
+    
+
 
 class ChunkSource(BaseModel):
     chunk_id: str
     document_id: str
     chunk_index: int
     similarity_score: float
-
+    
 class RAGResponse(BaseModel):
+    query: str
+    answer: str
+    sources: List[ChunkSource]
+
+
+    
+class ChatSessionCreate(BaseModel):
+    title: Optional[str] = "New Conversation"
+    document_id: Optional[str] = None
+    
+class ChatSessionResponse(BaseModel):
+    id: UUID
+    title: str
+    document_id: Optional[UUID] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ChatMessageResponse(BaseModel):
+    id: UUID
+    role: str
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class MemoryRAGRequest(BaseModel):
+    session_id: UUID
+    query: str
+    top_k: int = 3
+    document_id: Optional[str] = None
+
+class MemoryRAGResponse(BaseModel):
+    session_id: UUID
     query: str
     answer: str
     sources: List[ChunkSource]

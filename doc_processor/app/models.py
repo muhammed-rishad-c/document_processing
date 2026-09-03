@@ -29,3 +29,24 @@ class DocumentChunk(Base):
 
     document = relationship("Document", back_populates="chunks")
     
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String, nullable=True, default="New Conversation")
+    document_id = Column(UUID(as_uuid=True), nullable=True) 
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+    
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False)  
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    session = relationship("ChatSession", back_populates="messages")
+    
