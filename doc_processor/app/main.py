@@ -302,15 +302,14 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
-    recent_messages = (
+    all_messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == payload.session_id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(8)
+        .order_by(ChatMessage.created_at.asc())
         .all()
     )
-    chronological_history = list(reversed(recent_messages))
-    history_payload = [{"role": msg.role, "content": msg.content} for msg in chronological_history]
+
+    history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
 
     try:
         target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
