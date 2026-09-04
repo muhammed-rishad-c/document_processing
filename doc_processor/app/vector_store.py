@@ -1,6 +1,8 @@
+import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue
 from sentence_transformers import SentenceTransformer
+from qdrant_client.http.models import PointStruct ,Filter, FieldCondition, MatchValue
 
 encoder = SentenceTransformer("all-MiniLM-L6-v2")
 qdrant = QdrantClient(host="localhost", port=6333)
@@ -20,20 +22,28 @@ def get_embedding(text: str) -> list[float]:
     return encoder.encode(text).tolist()
 
     
-def store_chunk_vector(chunks_data:list[dict]):
-    points = [
-        PointStruct(
-            id=str(chunk["point_id"]),
-            vector=chunk["embedding"],
-            payload={
-                "document_id": str(chunk["document_id"]),
-                "chunk_index": chunk["chunk_index"],
-                "chunk_text": chunk["chunk_text"],
-                "token_count": chunk["token_count"]
-            }
+def store_chunk_vector(chunks_data: list[dict]):
+    points = []
+    for chunk in chunks_data:
+        
+        try:
+            point_id = str(uuid.UUID(str(chunk["point_id"])))
+        except ValueError:
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(chunk["point_id"])))
+
+        points.append(
+            PointStruct(
+                id=point_id,
+                vector=chunk["embedding"],
+                payload={
+                    "document_id": str(chunk["document_id"]),
+                    "chunk_index": int(chunk["chunk_index"]),
+                    "chunk_text": str(chunk["chunk_text"]),
+                    "token_count": int(chunk["token_count"])
+                }
+            )
         )
-        for chunk in chunks_data
-    ]
+        
     qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
     
 def delete_vector(doc_id: str):
@@ -52,9 +62,8 @@ def delete_vector(doc_id: str):
     
 def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = None) -> list[dict]:
     query_vector = get_embedding(query_text)
-    
     query_filter = None
-    
+
     if document_id and str(document_id).strip().lower() not in ["", "null", "undefined", "none"]:
         query_filter = Filter(
             must=[
@@ -70,7 +79,7 @@ def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = No
             response = qdrant.query_points(
                 collection_name=COLLECTION_NAME,
                 query=query_vector,
-                query_filter=query_filter,  
+                query_filter=query_filter,
                 limit=top_k,
                 with_payload=True
             )
@@ -89,12 +98,13 @@ def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = No
 
     results = []
     for point in points:
+        payload = point.payload or {}
         results.append({
             "chunk_id": str(point.id),
-            "document_id": str(point.payload.get("document_id")),
-            "chunk_index": int(point.payload.get("chunk_index", 0)),
-            "chunk_text": str(point.payload.get("chunk_text", "")),
-            "token_count": int(point.payload.get("token_count", 0)),
+            "document_id": str(payload.get("document_id", "")),
+            "chunk_index": int(payload.get("chunk_index", 0)),
+            "chunk_text": str(payload.get("chunk_text", "")),
+            "token_count": int(payload.get("token_count", 0)),
             "similarity_score": round(float(point.score), 4)
         })
 

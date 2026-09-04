@@ -1,6 +1,6 @@
+import uuid
 import os
 from uuid import UUID
-import uuid
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status
 from fastapi import APIRouter,Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,7 +51,6 @@ from .vector_store import (
 )
 
 from .llm_service import(
-    generate_rag_answer,
     generate_rag_answer_with_memory,
 )
 
@@ -299,12 +298,10 @@ def get_chat_messages(session_id: UUID, db: Session = Depends(get_db)):
 
 @app.post("/documents/chat-memory", response_model=MemoryRAGResponse)
 def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
-    
     session = db.query(ChatSession).filter(ChatSession.id == payload.session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
-    
     recent_messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == payload.session_id)
@@ -312,44 +309,46 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
         .limit(8)
         .all()
     )
-    
     chronological_history = list(reversed(recent_messages))
     history_payload = [{"role": msg.role, "content": msg.content} for msg in chronological_history]
 
-    
+    try:
+        target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
+        
+        search_query = payload.query
+        summary_terms = ["summarize", "summary", "overview", "recap", "main points"]
+        if any(term in payload.query.lower() for term in summary_terms):
+            search_query = "overview summary main background introduction key takeaways"
+
+        retrieved_chunks = search_similar_chunks(
+            query_text=search_query,
+            top_k=payload.top_k,
+            document_id=target_doc_id
+        )
+
+        llm_result = generate_rag_answer_with_memory(
+            user_query=payload.query,
+            retrieved_chunks=retrieved_chunks,
+            chat_history=history_payload
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"RAG processing failed: {str(e)}")
+
     user_msg = ChatMessage(
         session_id=payload.session_id,
         role="user",
         content=payload.query
     )
-    db.add(user_msg)
-    db.commit()
-
-    
-    target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
-    retrieved_chunks = search_similar_chunks(
-        query_text=payload.query,
-        top_k=payload.top_k,
-        document_id=target_doc_id
-    )
-
-    
-    llm_result = generate_rag_answer_with_memory(
-        user_query=payload.query,
-        retrieved_chunks=retrieved_chunks,
-        chat_history=history_payload
-    )
-
-    
     assistant_msg = ChatMessage(
         session_id=payload.session_id,
         role="assistant",
         content=llm_result["text"]
     )
-    db.add(assistant_msg)
+    
+    db.add_all([user_msg, assistant_msg])
     db.commit()
 
-    
     formatted_sources = [
         ChunkSource(
             chunk_id=str(c.get("chunk_id", "")),

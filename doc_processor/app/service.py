@@ -1,5 +1,6 @@
 import io
 import re
+import os,uuid
 from collections import Counter
 import pymupdf as fitz
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -99,40 +100,56 @@ def search_text_in_document(text: str, query: str) -> dict:
 def count_token(text:str)->int:
     return len(tokenizer.encode(text))
 
-def chunk_text(text:str,max_chunk_size:int=300,chunk_overlap:int=50)->list[dict]:
-    
-    tokens=tokenizer.encode(text)
-    total_token=len(tokens)
-    
-    if total_token==0:
+def chunk_text(text: str, max_chunk_size: int = 300, chunk_overlap: int = 50) -> list[dict]:
+    if not text.strip():
         return []
+
     
-    chunks=[]
-    chunk_index=0
-    start_idx=0
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    chunks = []
+    chunk_index = 0
     
-    step=max_chunk_size-chunk_overlap
-    if step<=0:
-        raise ValueError("max chunk size is less than overlap size")
+    current_tokens = []
     
-    while start_idx<total_token:
+    for paragraph in paragraphs:
+        para_tokens = tokenizer.encode(paragraph)
         
-        end_idx=min(start_idx+max_chunk_size,total_token)
-        chunk_tokens=tokens[start_idx:end_idx]
-        chunk_text_str=tokenizer.decode(chunk_tokens)
         
+        if len(para_tokens) > max_chunk_size:
+            start = 0
+            step = max_chunk_size - chunk_overlap
+            while start < len(para_tokens):
+                chunk_toks = para_tokens[start:start + max_chunk_size]
+                chunks.append({
+                    "chunk_index": chunk_index,
+                    "chunk_text": tokenizer.decode(chunk_toks),
+                    "token_count": len(chunk_toks)
+                })
+                chunk_index += 1
+                start += step
+            continue
+
+
+        if len(current_tokens) + len(para_tokens) <= max_chunk_size:
+            current_tokens.extend(para_tokens)
+        else:
+            chunks.append({
+                "chunk_index": chunk_index,
+                "chunk_text": tokenizer.decode(current_tokens),
+                "token_count": len(current_tokens)
+            })
+            chunk_index += 1
+            
+            overlap_tokens = current_tokens[-chunk_overlap:] if chunk_overlap < len(current_tokens) else current_tokens
+            current_tokens = overlap_tokens + para_tokens
+
+    if current_tokens:
         chunks.append({
-            "chunk_index":chunk_index,
-            "chunk_text":chunk_text_str,
-            "token_count":len(chunk_tokens)
+            "chunk_index": chunk_index,
+            "chunk_text": tokenizer.decode(current_tokens),
+            "token_count": len(current_tokens)
         })
-        
-        chunk_index+=1
-        if end_idx>=total_token:
-            break
-        
-        start_idx+=step
-        
+
     return chunks
     
     
