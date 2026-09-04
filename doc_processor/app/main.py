@@ -244,7 +244,7 @@ def chat_with_document(payload:RAGRequest):
                 answer="there is no content found in vector database",
                 sources=[]
             )
-        answer_result = generate_rag_answer(
+        answer_result = generate_rag_answer_with_memory(
             user_query=payload.query,
             retrieved_chunks=chunks
         )
