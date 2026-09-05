@@ -42,7 +42,14 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 BASE_URL = "http://localhost:9000"
 DOCUMENTS_ENDPOINT = f"{BASE_URL}/documents"
 CHAT_ENDPOINT = f"{BASE_URL}/documents/chat"
-TOP_K_VALUES = [1, 3, 5, 10]
+TOP_K_VALUES = [4,5,6,7]
+
+# openrouter/free auto-routes across community-hosted models that commonly
+# rate-limit under rapid sequential requests. This script makes 25 x 4 = 100
+# calls in one run, so pacing matters more here than in a single-pass script.
+REQUEST_DELAY_SECONDS = 1.5
+BETWEEN_PASS_DELAY_SECONDS = 5  # extra breathing room when switching top_k
+MAX_RETRIES = 3
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
@@ -82,6 +89,42 @@ def resolve_expected_sources(expected_sources: set[str], filename_to_id: dict[st
     return resolved
 
 
+def post_with_retry(url: str, payload: dict, timeout: int) -> requests.Response:
+    """POSTs with retry-with-backoff on HTTP 429 and transient network
+    errors. Respects a Retry-After header if present; otherwise backs off
+    exponentially. Raises on the final attempt so the caller's existing
+    except/continue logic still applies."""
+    last_exception = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.post(url, json=payload, timeout=timeout)
+        except requests.RequestException as e:
+            last_exception = e
+            if attempt == MAX_RETRIES:
+                raise
+            wait = 2 ** attempt
+            print(f"    [WARN] request error ({e}); retrying in {wait}s "
+                  f"(attempt {attempt}/{MAX_RETRIES})")
+            time.sleep(wait)
+            continue
+
+        if response.status_code == 429:
+            if attempt == MAX_RETRIES:
+                return response
+            retry_after = response.headers.get("Retry-After")
+            wait = float(retry_after) if retry_after else 2 ** attempt
+            print(f"    [WARN] 429 rate-limited; retrying in {wait:.1f}s "
+                  f"(attempt {attempt}/{MAX_RETRIES})")
+            time.sleep(wait)
+            continue
+
+        return response
+
+    if last_exception:
+        raise last_exception
+    return response
+
+
 def cosine_similarity(generated: str, expected: str) -> float:
     if not generated.strip() or not expected.strip():
         return 0.0
@@ -115,14 +158,17 @@ def run_for_topk(questions: list[dict], top_k: int) -> dict:
 
         start = time.perf_counter()
         try:
-            response = requests.post(CHAT_ENDPOINT, json=payload, timeout=90)
+            response = post_with_retry(CHAT_ENDPOINT, payload, timeout=90)
         except requests.RequestException as e:
-            print(f"    [WARN] request failed for '{question[:40]}...': {e}")
+            print(f"    [WARN] request failed after {MAX_RETRIES} attempts for "
+                  f"'{question[:40]}...': {e}")
+            time.sleep(REQUEST_DELAY_SECONDS)
             continue
         elapsed_ms = (time.perf_counter() - start) * 1000.0
 
         if response.status_code != 200:
             print(f"    [WARN] HTTP {response.status_code} for '{question[:40]}...'")
+            time.sleep(REQUEST_DELAY_SECONDS)
             continue
 
         latencies.append(elapsed_ms)
@@ -146,6 +192,8 @@ def run_for_topk(questions: list[dict], top_k: int) -> dict:
 
         if not is_unanswerable:
             cosine_scores.append(cosine_similarity(generated_answer, expected_answer))
+
+        time.sleep(REQUEST_DELAY_SECONDS)
 
     return {
         "top_k": top_k,
@@ -190,6 +238,8 @@ def main():
               f"AnswerSim={result['avg_cosine_similarity_pct']}%  "
               f"CtxTokens~{result['avg_context_tokens_est']}  "
               f"Latency={result['avg_latency_ms']}ms")
+        print(f"  Pausing {BETWEEN_PASS_DELAY_SECONDS}s before next top_k pass...")
+        time.sleep(BETWEEN_PASS_DELAY_SECONDS)
 
     print_comparison(all_results)
 

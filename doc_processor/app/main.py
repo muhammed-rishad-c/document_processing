@@ -121,7 +121,7 @@ async def upload_document(
         request: Request,
         file: UploadFile = File(...),
         db: Session = Depends(get_db),
-        chunk_size:int=300,
+        chunk_size:int=500,
         chunk_overlap:int=50
     ):
     if not file.filename:

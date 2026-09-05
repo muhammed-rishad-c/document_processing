@@ -6,14 +6,11 @@ from datetime import datetime, timezone
 ANALYTICS_LOG_PATH = Path(__file__).resolve().parent / "analytics_log.jsonl"
 _write_lock = threading.Lock()
 
-# Both 0.0 since /documents/chat and /documents/chat-memory currently run on
-# OpenRouter's "openrouter/free" model. Set real $/1K rates here if you switch
-# to a paid model later — nothing else needs to change.
+
 PRICE_PER_1K_INPUT_TOKENS = 0.0
 PRICE_PER_1K_OUTPUT_TOKENS = 0.0
 
-# Which stage names belong to which pipeline, used to pick a "slowest stage"
-# per pipeline instead of mixing upload timings and chat timings together.
+
 QUERY_STAGE_NAMES = {"query_embedding_ms", "vector_search_ms", "context_prep_ms", "llm_generation_ms"}
 UPLOAD_STAGE_NAMES = {"document_processing_ms", "chunk_embedding_ms"}
 

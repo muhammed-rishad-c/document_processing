@@ -73,9 +73,9 @@ SOURCE_FILES: list[str] = [
     "eval/the-metamorphosis-franz-kafka-10258.pdf",
 ]
 
-CHUNK_SIZES = [300, 500, 800]
+CHUNK_SIZES = [400]
 CHUNK_OVERLAP = 50   # fixed across all runs — see docstring
-EVAL_TOP_K = 5        # fixed across all runs — see docstring
+EVAL_TOP_K = 6        # fixed across all runs — see docstring
 
 # ---------------------------------------------------------------------------
 # Config — shouldn't need to change
