@@ -249,13 +249,13 @@ def chat_with_document(payload:RAGRequest):
             retrieved_chunks=chunks
         )
         sources = [
-            ChunkSource(
-                chunk_id=c["chunk_id"],
-                document_id=c["document_id"],
-                chunk_index=c["chunk_index"],
-                similarity_score=c["similarity_score"]
-            )
-            for c in chunks
+        ChunkSource(
+            chunk_id=str(c.get("chunk_id", "")),
+            document_id=c.get("document_id", 0),
+            chunk_index=c.get("chunk_index", 0),
+            similarity_score=float(c.get("similarity_score", 0.0)),
+        )
+        for c in chunks
         ]
 
         return RAGResponse(

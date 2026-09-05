@@ -1,0 +1,190 @@
+{
+  "dataset_info": {
+    "source_document": "the-metamorphosis-franz-kafka-10258.pdf",
+    "note": "expected_sources uses the FILENAME, not a document UUID. UUIDs are reassigned by /documents/upload every time a file is (re)uploaded, so a hard-coded UUID goes stale the moment the file is re-uploaded (e.g. during the chunk-size experiment). Each eval script resolves the current document_id for this filename via GET /documents at run time instead.",
+    "categories": {
+      "easy": "Q1-Q8",
+      "multi_chunk": "Q9-Q14",
+      "cross_section": "Q15-Q18",
+      "ambiguous_pairs": "Q19-Q22",
+      "unanswerable": "Q23-Q25"
+    }
+  },
+  "questions": [
+    {
+      "id": "Q1",
+      "category": "easy",
+      "question": "What happens to Gregor Samsa at the very beginning of the story?",
+      "expected_answer": "He wakes up one morning to find he has been transformed into a monstrous insect/vermin.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q2",
+      "category": "easy",
+      "question": "What is Gregor's job?",
+      "expected_answer": "He is a traveling salesman selling cloth goods.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q3",
+      "category": "easy",
+      "question": "Who is the first person to knock on Gregor's door on the morning of his transformation?",
+      "expected_answer": "His mother.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q4",
+      "category": "easy",
+      "question": "What is the name of Gregor's sister?",
+      "expected_answer": "Grete.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q5",
+      "category": "easy",
+      "question": "What food does Gregor's sister first leave for him, and how does he react to it?",
+      "expected_answer": "She leaves sweetened milk with pieces of white bread in it, but Gregor is disappointed and turns away from it in aversion.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q6",
+      "category": "easy",
+      "question": "What object does Gregor's father throw at him that causes a serious, lasting wound?",
+      "expected_answer": "An apple, thrown from the fruit bowl, which lodges in Gregor's back.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q7",
+      "category": "easy",
+      "question": "What instrument does Grete play?",
+      "expected_answer": "The violin.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q8",
+      "category": "easy",
+      "question": "How many lodgers does the Samsa family take in, and what do they have in common physically?",
+      "expected_answer": "Three lodgers, all of whom have full beards.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q9",
+      "category": "multi_chunk",
+      "question": "How does the family's financial situation get explained to Gregor, and what savings do they actually have?",
+      "expected_answer": "The father explains there is a small leftover fortune from his failed business, plus unspent money Gregor had brought home, which together only add up to enough to support the family for one or two years and should be kept as an emergency reserve \u2014 not enough to live on the interest alone.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q10",
+      "category": "multi_chunk",
+      "question": "How does Gregor's relationship with food change over the course of the story?",
+      "expected_answer": "Early on he still has a strong appetite and is drawn to spoiled/pungent food over fresh food; over time his interest in eating steadily declines until, in Part III, he eats almost nothing at all and effectively starves.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q11",
+      "category": "multi_chunk",
+      "question": "Describe how responsibility for cleaning Gregor's room shifts between different characters over the course of the story.",
+      "expected_answer": "Grete initially handles his food and room; the mother once takes over cleaning it, which upsets Grete; eventually neither the mother nor Grete regularly cleans it, and the job falls to the elderly cleaning woman who is unafraid of Gregor.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q12",
+      "category": "multi_chunk",
+      "question": "How and why does the furniture in Gregor's room change during the story?",
+      "expected_answer": "Grete and the mother start removing the chest of drawers and writing desk to give Gregor more room to crawl on the walls and ceiling; the mother argues for leaving it so Gregor's humanity is preserved, but Grete insists on emptying it, and eventually the room is also used to store household junk.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q13",
+      "category": "multi_chunk",
+      "question": "What sequence of events leads directly to Gregor's death?",
+      "expected_answer": "After the lodgers discover him and angrily give notice, Grete declares the family must get rid of 'it'; Gregor, already weakened by the embedded apple wound and long starvation, retreats to his room and dies quietly before dawn.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q14",
+      "category": "multi_chunk",
+      "question": "What jobs do the family members take on after Gregor can no longer support them?",
+      "expected_answer": "The father becomes a bank messenger/servant, the mother sews fine undergarments for a fashion shop, and Grete gets a job as a salesgirl (while also studying stenography and French in the evenings).",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q15",
+      "category": "cross_section",
+      "question": "Compare the manager's reaction to Gregor in Part I with the lodgers' reaction to discovering him in Part III.",
+      "expected_answer": "The manager flees in horror the instant he sees Gregor, rushing down the stairs; the lodgers, on discovering him, react with cold indignation, declaring the household conditions disgraceful and immediately canceling their room without paying.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q16",
+      "category": "cross_section",
+      "question": "How does the father's physical condition change from the beginning of the story to Part II?",
+      "expected_answer": "In Part I he is depicted as old, worn down, and largely inactive after his business failed; by Part II, after taking a job as a bank servant, he stands up straight, wears a smart uniform, and moves with new alertness and physical force.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q17",
+      "category": "cross_section",
+      "question": "What plan did Gregor have for his sister's future, and how does the family's outlook on her contrast at the very end of the story?",
+      "expected_answer": "Gregor had secretly planned to send Grete to the music conservatory to study violin. At the end, after his death, the parents instead notice she has blossomed into a young woman and begin thinking about finding her a husband \u2014 the conservatory dream is never mentioned again.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q18",
+      "category": "cross_section",
+      "question": "How does the family's willingness to discuss Gregor's condition openly in front of him change between Part I and Part III?",
+      "expected_answer": "In Part I, the family is cautious and worried, trying to help without confronting the truth directly; by Part III, Grete openly refuses to say Gregor's name and argues in front of the closed door that 'it' must be gotten rid of, treating him as no longer part of the family.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q19",
+      "category": "ambiguous_pair",
+      "question": "What did the office manager say immediately after hearing Gregor's altered voice through the door (before seeing him)?",
+      "expected_answer": "He remarked that it sounded like 'an animal's voice.'",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q20",
+      "category": "ambiguous_pair",
+      "question": "What did the office manager do immediately after actually seeing Gregor for the first time?",
+      "expected_answer": "He cried out and fled toward the staircase, eventually leaping down several stairs to get away.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q21",
+      "category": "ambiguous_pair",
+      "question": "What did the cleaning woman say when she found Gregor's body?",
+      "expected_answer": "She called out that he had 'kicked the bucket' and was 'totally snuffed.'",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q22",
+      "category": "ambiguous_pair",
+      "question": "What did Mr. Samsa say after being told Gregor was dead?",
+      "expected_answer": "He said, 'now we can give thanks to God,' and crossed himself.",
+      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+    },
+    {
+      "id": "Q23",
+      "category": "unanswerable",
+      "question": "What specific species of insect does Gregor Samsa turn into?",
+      "expected_answer": "This information is not present in the document \u2014 the text deliberately never names a specific species, only describing him as a 'monstrous verminous bug.'",
+      "expected_sources": []
+    },
+    {
+      "id": "Q24",
+      "category": "unanswerable",
+      "question": "What was Gregor's exact age at the time of his transformation?",
+      "expected_answer": "This information is not present in the document.",
+      "expected_sources": []
+    },
+    {
+      "id": "Q25",
+      "category": "unanswerable",
+      "question": "What exact wording did Mr. Samsa, Mrs. Samsa, and Grete each use in their letters of apology to their employers?",
+      "expected_answer": "This information is not present in the document \u2014 the letters are mentioned as being written, but their content is never given.",
+      "expected_sources": []
+    }
+  ]
+}

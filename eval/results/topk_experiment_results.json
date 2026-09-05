@@ -1,0 +1,38 @@
+[
+  {
+    "top_k": 1,
+    "questions_run": 25,
+    "avg_latency_ms": 6589.18,
+    "top1_accuracy_pct": 100.0,
+    "top3_accuracy_pct": 100.0,
+    "avg_cosine_similarity_pct": 49.6,
+    "avg_context_tokens_est": 0
+  },
+  {
+    "top_k": 3,
+    "questions_run": 25,
+    "avg_latency_ms": 6566.39,
+    "top1_accuracy_pct": 100.0,
+    "top3_accuracy_pct": 100.0,
+    "avg_cosine_similarity_pct": 53.59,
+    "avg_context_tokens_est": 0
+  },
+  {
+    "top_k": 5,
+    "questions_run": 25,
+    "avg_latency_ms": 5971.32,
+    "top1_accuracy_pct": 100.0,
+    "top3_accuracy_pct": 100.0,
+    "avg_cosine_similarity_pct": 49.16,
+    "avg_context_tokens_est": 0
+  },
+  {
+    "top_k": 10,
+    "questions_run": 25,
+    "avg_latency_ms": 7424.06,
+    "top1_accuracy_pct": 100.0,
+    "top3_accuracy_pct": 100.0,
+    "avg_cosine_similarity_pct": 57.33,
+    "avg_context_tokens_est": 0
+  }
+]

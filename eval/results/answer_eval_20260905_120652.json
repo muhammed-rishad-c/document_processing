@@ -1,0 +1,286 @@
+{
+  "results": [
+    {
+      "id": "Q1",
+      "category": "easy",
+      "question": "What happens to Gregor Samsa at the very beginning of the story?",
+      "generated_answer": "I cannot find the answer in the provided document context. The excerpts provided begin with Part I (near the end of the story's first section), Part II, and Part III, but do not include the opening scene where Gregor Samsa first awakens transformed into a monstrous vermin.",
+      "expected_answer": "He wakes up one morning to find he has been transformed into a monstrous insect/vermin.",
+      "latency_ms": 9318.92,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.4991,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q2",
+      "category": "easy",
+      "question": "What is Gregor's job?",
+      "generated_answer": "Gregor is a traveling salesman.",
+      "expected_answer": "He is a traveling salesman selling cloth goods.",
+      "latency_ms": 6614.46,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.4837,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q3",
+      "category": "easy",
+      "question": "Who is the first person to knock on Gregor's door on the morning of his transformation?",
+      "generated_answer": "I cannot find the answer in the provided document context.",
+      "expected_answer": "His mother.",
+      "latency_ms": 8217.23,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.1179,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q4",
+      "category": "easy",
+      "question": "What is the name of Gregor's sister?",
+      "generated_answer": "The name of Gregor's sister is not mentioned in the provided context.",
+      "expected_answer": "Grete.",
+      "latency_ms": 3373.37,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.1742,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q5",
+      "category": "easy",
+      "question": "What food does Gregor's sister first leave for him, and how does he react to it?",
+      "generated_answer": "She first leaves old, rotten food, which Gregor finds completely inedible, causing him to angrily bite into the glass dish.",
+      "expected_answer": "She leaves sweetened milk with pieces of white bread in it, but Gregor is disappointed and turns away from it in aversion.",
+      "latency_ms": 3651.13,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.6389,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q6",
+      "category": "easy",
+      "question": "What object does Gregor's father throw at him that causes a serious, lasting wound?",
+      "generated_answer": "An apple.",
+      "expected_answer": "An apple, thrown from the fruit bowl, which lodges in Gregor's back.",
+      "latency_ms": 3274.46,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.6452,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q7",
+      "category": "easy",
+      "question": "What instrument does Grete play?",
+      "generated_answer": "Grete plays the violin.",
+      "expected_answer": "The violin.",
+      "latency_ms": 3401.71,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.6771,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q8",
+      "category": "easy",
+      "question": "How many lodgers does the Samsa family take in, and what do they have in common physically?",
+      "generated_answer": "Three lodgers. They are all described as wearing \"somewhat worn jackets.\"",
+      "expected_answer": "Three lodgers, all of whom have full beards.",
+      "latency_ms": 7260.19,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.6918,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q9",
+      "category": "multi_chunk",
+      "question": "How does the family's financial situation get explained to Gregor, and what savings do they actually have?",
+      "generated_answer": "The father explains the situation at the table, pulling out documents and notebooks from a salvaged lockbox. Gregor learns that despite the family's bad luck, a small fortune remained from the old business, whose untouched interest had gradually increased over time. Additionally, money Gregor brought home monthly\u2014keeping only a few florins for himself\u2014had accumulated into a small capital amount.",
+      "expected_answer": "The father explains there is a small leftover fortune from his failed business, plus unspent money Gregor had brought home, which together only add up to enough to support the family for one or two years and should be kept as an emergency reserve \u2014 not enough to live on the interest alone.",
+      "latency_ms": 7907.55,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.8149,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q10",
+      "category": "multi_chunk",
+      "question": "How does Gregor's relationship with food change over the course of the story?",
+      "generated_answer": "Gregor's relationship with food shifts from eager consumption to decreasing appetite. Initially, he eats \"greedily\" with \"eyes watering with satisfaction,\" devouring cheese, vegetables, and sauce while avoiding fresh food due to its smell. Later, his sister notes with sadness, \"Now everything has stopped again,\" indicating his appetite fades significantly over time.",
+      "expected_answer": "Early on he still has a strong appetite and is drawn to spoiled/pungent food over fresh food; over time his interest in eating steadily declines until, in Part III, he eats almost nothing at all and effectively starves.",
+      "latency_ms": 9790.25,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.5725,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q11",
+      "category": "multi_chunk",
+      "question": "Describe how responsibility for cleaning Gregor's room shifts between different characters over the course of the story.",
+      "generated_answer": "Initially, the sister reserves cleaning Gregor\u2019s room for herself. When the mother cleans it once using buckets of water, the sister becomes offended and cries, prompting the father to declare the sister can no longer clean it. The cleaning woman\u2014an old widow\u2014then takes over the responsibility, though she haphazardly throws unused items into the room rather than maintaining it properly.",
+      "expected_answer": "Grete initially handles his food and room; the mother once takes over cleaning it, which upsets Grete; eventually neither the mother nor Grete regularly cleans it, and the job falls to the elderly cleaning woman who is unafraid of Gregor.",
+      "latency_ms": 10215.44,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.7037,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q12",
+      "category": "multi_chunk",
+      "question": "How and why does the furniture in Gregor's room change during the story?",
+      "generated_answer": "His sister initiates the removal to give him room to crawl, but Gregor reverses his opinion after hearing his mother's plea to keep the room unchanged for his eventual return. Ultimately, the furniture remains, as Gregor decides he needs its familiar comfort and connection to his human past.",
+      "expected_answer": "Grete and the mother start removing the chest of drawers and writing desk to give Gregor more room to crawl on the walls and ceiling; the mother argues for leaving it so Gregor's humanity is preserved, but Grete insists on emptying it, and eventually the room is also used to store household junk.",
+      "latency_ms": 6502.04,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.7413,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q13",
+      "category": "multi_chunk",
+      "question": "What sequence of events leads directly to Gregor's death?",
+      "generated_answer": "Gregor's wound (the apple lodged in his flesh) left him immobile. He reflected on his family with \"deep feeling and love\" and concluded he needed to disappear. He remained in peaceful contemplation until the tower clock struck three in the morning, then his head sank down and his last breath flowed out weakly.",
+      "expected_answer": "After the lodgers discover him and angrily give notice, Grete declares the family must get rid of 'it'; Gregor, already weakened by the embedded apple wound and long starvation, retreats to his room and dies quietly before dawn.",
+      "latency_ms": 7532.34,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.6811,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q14",
+      "category": "multi_chunk",
+      "question": "What jobs do the family members take on after Gregor can no longer support them?",
+      "generated_answer": "The sister takes a job as a salesgirl and studies stenography and French in the evenings to potentially obtain a better position. The father becomes a servant (wearing uniform even at home). The mother sews fine undergarments for a fashion shop.",
+      "expected_answer": "The father becomes a bank messenger/servant, the mother sews fine undergarments for a fashion shop, and Grete gets a job as a salesgirl (while also studying stenography and French in the evenings).",
+      "latency_ms": 6280.09,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.7487,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q15",
+      "category": "cross_section",
+      "question": "Compare the manager's reaction to Gregor in Part I with the lodgers' reaction to discovering him in Part III.",
+      "generated_answer": "I cannot find information about the lodgers' discovery of Gregor in the provided document context.",
+      "expected_answer": "The manager flees in horror the instant he sees Gregor, rushing down the stairs; the lodgers, on discovering him, react with cold indignation, declaring the household conditions disgraceful and immediately canceling their room without paying.",
+      "latency_ms": 5322.47,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.3697,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q16",
+      "category": "cross_section",
+      "question": "How does the father's physical condition change from the beginning of the story to Part II?",
+      "generated_answer": "The father transforms from a frail, dependent invalid at the start to an active, authoritative authority figure by Part II.",
+      "expected_answer": "In Part I he is depicted as old, worn down, and largely inactive after his business failed; by Part II, after taking a job as a bank servant, he stands up straight, wears a smart uniform, and moves with new alertness and physical force.",
+      "latency_ms": 4133.88,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.3532,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q17",
+      "category": "cross_section",
+      "question": "What plan did Gregor have for his sister's future, and how does the family's outlook on her contrast at the very end of the story?",
+      "generated_answer": "Gregor's secret plan was to send his sister to the conservatory next year, since she loved music and played the violin charmingly, despite the great expense. At the story's end, however, the family's outlook had shifted drastically toward her\u2014they had stopped eating, her sister took on cooking duties with their mother, and there was an atmosphere of despair with even small comforts like beer being refused.",
+      "expected_answer": "Gregor had secretly planned to send Grete to the music conservatory to study violin. At the end, after his death, the parents instead notice she has blossomed into a young woman and begin thinking about finding her a husband \u2014 the conservatory dream is never mentioned again.",
+      "latency_ms": 5650.01,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.7519,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q18",
+      "category": "cross_section",
+      "question": "How does the family's willingness to discuss Gregor's condition openly in front of him change between Part I and Part III?",
+      "generated_answer": "In Part III, the family now deliberately leaves the living room door open, allowing Gregor to see and listen to them\u2014\"with their common permission.\" However, conversations remain quiet and \"guarded,\" with the mother and sister speaking carefully to each other rather than addressing Gregor directly. This marks a shift from Part I, where the family was horrified, avoided him entirely, and filled his room with furniture to hide him away.",
+      "expected_answer": "In Part I, the family is cautious and worried, trying to help without confronting the truth directly; by Part III, Grete openly refuses to say Gregor's name and argues in front of the closed door that 'it' must be gotten rid of, treating him as no longer part of the family.",
+      "latency_ms": 13259.25,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.6674,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q19",
+      "category": "ambiguous_pair",
+      "question": "What did the office manager say immediately after hearing Gregor's altered voice through the door (before seeing him)?",
+      "generated_answer": "The office manager did not speak immediately upon hearing Gregor's altered voice. The office manager arrived later and spoke only after Gregor refused to open the door for an extended period.",
+      "expected_answer": "He remarked that it sounded like 'an animal's voice.'",
+      "latency_ms": 4885.39,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.3259,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q20",
+      "category": "ambiguous_pair",
+      "question": "What did the office manager do immediately after actually seeing Gregor for the first time?",
+      "generated_answer": "I cannot find the answer in the provided document context.",
+      "expected_answer": "He cried out and fled toward the staircase, eventually leaping down several stairs to get away.",
+      "latency_ms": 14537.38,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.0,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q21",
+      "category": "ambiguous_pair",
+      "question": "What did the cleaning woman say when she found Gregor's body?",
+      "generated_answer": "The text does not show the cleaning woman finding Gregor's body. She is only described threatening Gregor with a chair while he was alive, saying, \"This goes no further, all right?\"",
+      "expected_answer": "She called out that he had 'kicked the bucket' and was 'totally snuffed.'",
+      "latency_ms": 3424.11,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.2777,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q22",
+      "category": "ambiguous_pair",
+      "question": "What did Mr. Samsa say after being told Gregor was dead?",
+      "generated_answer": "\"Now we can give thanks to God.\"",
+      "expected_answer": "He said, 'now we can give thanks to God,' and crossed himself.",
+      "latency_ms": 5708.23,
+      "is_unanswerable": false,
+      "cosine_similarity": 0.7354,
+      "retrieval_correct": true
+    },
+    {
+      "id": "Q23",
+      "category": "unanswerable",
+      "question": "What specific species of insect does Gregor Samsa turn into?",
+      "generated_answer": "The text never specifies a species. Gregor is transformed into a \"monstrous verminous bug.\"",
+      "expected_answer": "This information is not present in the document \u2014 the text deliberately never names a specific species, only describing him as a 'monstrous verminous bug.'",
+      "latency_ms": 8209.11,
+      "is_unanswerable": true,
+      "correctly_refused": false
+    },
+    {
+      "id": "Q24",
+      "category": "unanswerable",
+      "question": "What was Gregor's exact age at the time of his transformation?",
+      "generated_answer": "I cannot find the answer in the provided document context.",
+      "expected_answer": "This information is not present in the document.",
+      "latency_ms": 5124.83,
+      "is_unanswerable": true,
+      "correctly_refused": true
+    },
+    {
+      "id": "Q25",
+      "category": "unanswerable",
+      "question": "What exact wording did Mr. Samsa, Mrs. Samsa, and Grete each use in their letters of apology to their employers?",
+      "generated_answer": "The document does not specify the wording of their letters. It only identifies the recipients: Mr. Samsa wrote to his supervisor, Mrs. Samsa to her client, and Grete to her proprietor.",
+      "expected_answer": "This information is not present in the document \u2014 the letters are mentioned as being written, but their content is never given.",
+      "latency_ms": 4461.5,
+      "is_unanswerable": true,
+      "correctly_refused": true
+    }
+  ],
+  "summary": {
+    "total_questions": 25,
+    "avg_latency_ms": 6722.21,
+    "answerable_count": 22,
+    "avg_cosine_similarity_pct": 53.05,
+    "retrieval_accuracy_pct": 100.0,
+    "hallucination_avoidance_pct": 66.67,
+    "hallucination_total": 3,
+    "hallucination_correct": 2
+  }
+}
