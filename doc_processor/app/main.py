@@ -1,13 +1,15 @@
 import uuid
 import os
+import time
 from uuid import UUID
-from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status,Request
 from fastapi import APIRouter,Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from . import analytics
 from .database import engine, Base, get_db
 from .models import (
     Document,
@@ -76,6 +78,35 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @app.on_event("startup")
 def startup_event():
     init_qdrant()
+    
+@app.middleware("http")
+async def analytics_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        route = request.scope.get("route")
+        path_template = route.path if route else request.url.path
+        token_data = getattr(request.state, "token_usage", None) or {}
+        stage_timings = getattr(request.state, "stage_timings", None)
+        analytics.log_request(
+            method=request.method,
+            path=path_template,
+            status_code=status_code,
+            response_time_ms=elapsed_ms,
+            input_tokens=token_data.get("input_tokens"),
+            context_tokens=token_data.get("context_tokens"),
+            output_tokens=token_data.get("output_tokens"),
+            stage_timings=stage_timings,
+        )
+        
+@app.get("/analytics")
+def get_analytics():
+    return analytics.build_summary()
 
 @app.get("/", response_class=FileResponse)
 async def read_index():
@@ -86,7 +117,9 @@ def list_documents(db: Session = Depends(get_db)):
     return db.query(Document).all()
 
 @app.post("/documents/upload", response_model=DocumentUploadResponse, status_code=201)
-async def upload_document(file: UploadFile = File(...),
+async def upload_document(
+        request: Request,
+        file: UploadFile = File(...),
         db: Session = Depends(get_db),
         chunk_size:int=300,
         chunk_overlap:int=50
@@ -98,6 +131,7 @@ async def upload_document(file: UploadFile = File(...),
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
     
+    t_proc_start = time.perf_counter()
     try:
         text, file_type = extract_text_from_file(file_bytes, file.filename)
         stats = calculate_document_stats(text)
@@ -124,10 +158,12 @@ async def upload_document(file: UploadFile = File(...),
         raw_chunks=chunk_text(text=text,max_chunk_size=chunk_size,chunk_overlap=chunk_overlap)
     except ValueError as e:
         raise HTTPException(status_code=400,detail=str(e))
+    t_proc_end = time.perf_counter()
     
     db_chunks=[]
     vector_data=[]
     
+    t_embed_start = time.perf_counter()
     for c in raw_chunks:
         chunk_uuid=uuid.uuid4()
         chunk_embedding=get_embedding(c["chunk_text"])
@@ -150,6 +186,12 @@ async def upload_document(file: UploadFile = File(...),
             "token_count": c["token_count"],
             "embedding": chunk_embedding
         })
+    t_embed_end = time.perf_counter()
+
+    request.state.stage_timings = {
+        "document_processing_ms": round((t_proc_end - t_proc_start) * 1000, 2),
+        "chunk_embedding_ms": round((t_embed_end - t_embed_start) * 1000, 2),
+    }
         
     try:
         db.add_all(db_chunks)
@@ -172,7 +214,8 @@ async def upload_document(file: UploadFile = File(...),
         "stats": doc.stats,
         "message": "Document successfully processed, chunked, embedded, and stored in PostgreSQL & Qdrant."
     }
-
+    
+    
 @app.get("/documents/{doc_id}", response_model=DocumentDetailResponse)
 def get_document(doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
@@ -229,16 +272,19 @@ def semantic_search(request: SemanticSearchRequest):
     
 
 @app.post("/documents/chat",response_model=RAGResponse)
-def chat_with_document(payload:RAGRequest):
+def chat_with_document(payload:RAGRequest,request:Request):
     try:
+        stage_timings: dict = {}
         chunks=search_similar_chunks(
             query_text=payload.query,
             top_k=payload.top_k,
-            document_id=payload.document_id
+            document_id=payload.document_id,
+            timing_out=stage_timings
             
         )
         
         if not chunks:
+            request.state.stage_timings = stage_timings
             return RAGResponse(
                 query=payload.query,
                 answer="there is no content found in vector database",
@@ -248,6 +294,15 @@ def chat_with_document(payload:RAGRequest):
             user_query=payload.query,
             retrieved_chunks=chunks
         )
+        stage_timings["context_prep_ms"] = answer_result.get("context_prep_ms", 0)
+        stage_timings["llm_generation_ms"] = answer_result.get("llm_generation_ms", 0)
+        request.state.stage_timings = stage_timings
+
+        request.state.token_usage = {
+            "input_tokens": answer_result.get("input_tokens", 0),
+            "context_tokens": answer_result.get("context_tokens", 0),
+            "output_tokens": answer_result.get("output_tokens", 0),
+        }
         sources = [
         ChunkSource(
             chunk_id=str(c.get("chunk_id", "")),
@@ -297,7 +352,7 @@ def get_chat_messages(session_id: UUID, db: Session = Depends(get_db)):
     return messages
 
 @app.post("/documents/chat-memory", response_model=MemoryRAGResponse)
-def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
+def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),request:Request=None):
     session = db.query(ChatSession).filter(ChatSession.id == payload.session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
@@ -312,6 +367,7 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
     history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
 
     try:
+        stage_timings: dict = {}
         target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
         
         search_query = payload.query
@@ -322,7 +378,8 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
         retrieved_chunks = search_similar_chunks(
             query_text=search_query,
             top_k=payload.top_k,
-            document_id=target_doc_id
+            document_id=target_doc_id,
+            timing_out=stage_timings
         )
 
         llm_result = generate_rag_answer_with_memory(
@@ -330,6 +387,15 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db)):
             retrieved_chunks=retrieved_chunks,
             chat_history=history_payload
         )
+        stage_timings["context_prep_ms"] = llm_result.get("context_prep_ms", 0)
+        stage_timings["llm_generation_ms"] = llm_result.get("llm_generation_ms", 0)
+        request.state.stage_timings = stage_timings
+
+        request.state.token_usage = {
+            "input_tokens": llm_result.get("input_tokens", 0),
+            "context_tokens": llm_result.get("context_tokens", 0),
+            "output_tokens": llm_result.get("output_tokens", 0),
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"RAG processing failed: {str(e)}")

@@ -1,4 +1,5 @@
 import os
+import time
 from dotenv import load_dotenv
 from openai import OpenAI
 from .service import count_token
@@ -90,12 +91,17 @@ def generate_rag_answer_with_memory(
     chat_history: list[dict] | None = None,
 ) -> dict:
     chat_history = chat_history or []
+    
+    t_ctx_start = time.perf_counter()
 
     reduced_history = reduce_chat_history(chat_history)
 
-    context_str, _ = build_safe_context(
+    context_str, context_tokens = build_safe_context(     
         retrieved_chunks, user_query, reduced_history
     )
+    t_ctx_end = time.perf_counter()
+    
+    
 
     summary_keywords = [
         "summarize",
@@ -152,12 +158,16 @@ def generate_rag_answer_with_memory(
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": user_query})
 
+    t_llm_start = time.perf_counter()
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
         extra_headers=EXTRA_HEADERS,
         temperature=0.3,
     )
+    t_llm_end = time.perf_counter()
+    
+    
 
     raw_text = response.choices[0].message.content.strip()
 
@@ -176,4 +186,7 @@ def generate_rag_answer_with_memory(
         "text": cleaned_text,
         "input_tokens": usage.prompt_tokens if usage else 0,
         "output_tokens": usage.completion_tokens if usage else 0,
+        "context_tokens": context_tokens,       
+        "context_prep_ms": round((t_ctx_end - t_ctx_start) * 1000, 2),      
+        "llm_generation_ms": round((t_llm_end - t_llm_start) * 1000, 2),   
     }

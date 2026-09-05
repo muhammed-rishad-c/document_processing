@@ -1,4 +1,5 @@
 import uuid
+import time
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue
 from sentence_transformers import SentenceTransformer
@@ -60,8 +61,13 @@ def delete_vector(doc_id: str):
         )
     )
     
-def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = None) -> list[dict]:
+def search_similar_chunks(query_text: str,
+                        top_k: int = 3,
+                        document_id: str = None,
+                        timing_out:dict | None=None) -> list[dict]:
+    t_embed_start=time.perf_counter()
     query_vector = get_embedding(query_text)
+    t_embed_end=time.perf_counter()
     query_filter = None
 
     if document_id and str(document_id).strip().lower() not in ["", "null", "undefined", "none"]:
@@ -73,6 +79,8 @@ def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = No
                 )
             ]
         )
+        
+    t_search_start=time.perf_counter()
 
     try:
         if hasattr(qdrant, "query_points"):
@@ -95,6 +103,11 @@ def search_similar_chunks(query_text: str, top_k: int = 3, document_id: str = No
     except Exception as e:
         print(f"Qdrant query execution error: {str(e)}")
         raise e
+    t_search_end=time.perf_counter()
+    
+    if timing_out is not None:
+        timing_out["query_embedding_ms"] = round((t_embed_end - t_embed_start) * 1000, 2)
+        timing_out["vector_search_ms"] = round((t_search_end - t_search_start) * 1000, 2)
 
     results = []
     for point in points:
