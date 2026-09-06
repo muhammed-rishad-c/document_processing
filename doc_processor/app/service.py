@@ -1,5 +1,7 @@
 import io
 import re
+import csv
+
 import os,uuid
 from collections import Counter
 import pymupdf as fitz
@@ -99,6 +101,36 @@ def search_text_in_document(text: str, query: str) -> dict:
 
 def count_token(text:str)->int:
     return len(tokenizer.encode(text))
+
+def generate_chunk_token_sequence_csv(chunks: list[dict], output_path: str) -> dict:
+    
+    
+    import csv
+
+    if not chunks:
+        raise ValueError("Cannot generate token report for an empty chunk list.")
+
+    rows = []
+    for chunk in chunks:
+        chunk_index = chunk["chunk_index"]
+        token_ids = tokenizer.encode(chunk["chunk_text"])
+        for position, token_id in enumerate(token_ids):
+            try:
+                token_text = tokenizer.decode([token_id])
+            except Exception:
+                token_text = "<decode_error>"
+            rows.append((chunk_index, position, token_id, token_text))
+
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["chunk_index", "position", "token_id", "token_text"])
+        writer.writerows(rows)
+
+    return {
+        "total_chunks": len(chunks),
+        "total_token_rows": len(rows),
+        "output_path": output_path,
+    }
 
 def chunk_text(text: str, max_chunk_size: int = 300, chunk_overlap: int = 50) -> list[dict]:
     if not text.strip():

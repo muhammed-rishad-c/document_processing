@@ -2,11 +2,11 @@ import uuid
 import os
 import time
 from uuid import UUID
-from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status,Request
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status, Request, BackgroundTasks
 from fastapi import APIRouter,Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse,Response
 from sqlalchemy.orm import Session
 
 from . import analytics
@@ -38,14 +38,14 @@ from .schemas import (
 from .service import (
     extract_text_from_file,
     calculate_document_stats,
-    search_text_in_document,
-    count_token,
-    chunk_text
+    chunk_text,
+    generate_chunk_token_sequence_csv
 
 )
 from .vector_store import (
     init_qdrant,
     get_embedding,
+    get_embeddings_batch,
     delete_vector,
     store_chunk_vector,
     search_similar_chunks
@@ -104,6 +104,15 @@ async def analytics_middleware(request: Request, call_next):
             stage_timings=stage_timings,
         )
         
+def _run_chunk_token_sequence_report(chunks: list[dict], output_path: str, doc_id) -> None:
+    try:
+        report = generate_chunk_token_sequence_csv(chunks, output_path)
+        print(f"[background] Chunk token sequence report saved for {doc_id}: {report}")
+    except Exception as e:
+        print(f"[background] WARNING: failed to generate chunk token sequence CSV "
+              f"for doc {doc_id}: {str(e)}")
+        
+        
 @app.get("/analytics")
 def get_analytics():
     return analytics.build_summary()
@@ -116,9 +125,14 @@ async def read_index():
 def list_documents(db: Session = Depends(get_db)):
     return db.query(Document).all()
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
+
 @app.post("/documents/upload", response_model=DocumentUploadResponse, status_code=201)
 async def upload_document(
         request: Request,
+        background_tasks: BackgroundTasks,
         file: UploadFile = File(...),
         db: Session = Depends(get_db),
         chunk_size:int=500,
@@ -149,9 +163,11 @@ async def upload_document(
         db.add(doc)
         db.commit()
         db.refresh(doc)
+        
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500,detail=f"Database error: {str(e)}")
+    
     
     
     try:
@@ -160,13 +176,19 @@ async def upload_document(
         raise HTTPException(status_code=400,detail=str(e))
     t_proc_end = time.perf_counter()
     
+    token_csv_path = os.path.join(UPLOAD_DIR, f"{doc.id}_chunk_tokens.csv")
+    background_tasks.add_task(_run_chunk_token_sequence_report, raw_chunks, token_csv_path, doc.id)
+    
     db_chunks=[]
     vector_data=[]
     
     t_embed_start = time.perf_counter()
-    for c in raw_chunks:
+    
+    chunk_texts = [c["chunk_text"] for c in raw_chunks]
+    chunk_embeddings = get_embeddings_batch(chunk_texts) if chunk_texts else []
+
+    for c, chunk_embedding in zip(raw_chunks, chunk_embeddings):
         chunk_uuid=uuid.uuid4()
-        chunk_embedding=get_embedding(c["chunk_text"])
         
         db_chunk=DocumentChunk(
             id=chunk_uuid,
@@ -228,7 +250,7 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found.")
-
+ 
     doc_id_str = str(doc.id)
 
     try:
@@ -430,6 +452,3 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
         answer=llm_result["text"],
         sources=formatted_sources
     )
-    
-    
-    

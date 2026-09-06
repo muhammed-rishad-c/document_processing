@@ -1,269 +1,626 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini Document Processing & RAG Chat Engine</title>
-    <style>
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --accent-color: #6366f1;
-            --accent-hover: #4f46e5;
-            --gemini-color: #8b5cf6;
-            --gemini-hover: #7c3aed;
-            --text-color: #f8fafc;
-            --subtext-color: #94a3b8;
-            --border-color: #334155;
-            --success-color: #10b981;
-            --user-msg-bg: #1e3a8a;
-            --bot-msg-bg: #2e1065;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Reading Room — Document Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0f1424;
+    --ink-2:#141a30;
+    --surface:#1a2138;
+    --surface-2:#212a47;
+    --hairline:#333e63;
+    --paper:#efe7d6;
+    --amber:#e2a13d;
+    --amber-hi:#f0b862;
+    --teal:#4f9b8f;
+    --rose:#c96a5a;
+    --text:#eee9de;
+    --text-dim:#9aa2bd;
+    --text-faint:#6d7594;
+    --radius-card: 3px;
+    --radius-pill: 999px;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+  }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 2rem;
-        }
+  *{box-sizing:border-box;}
 
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
+  html,body{
+    margin:0;
+    padding:0;
+    background:
+      radial-gradient(1100px 600px at 12% -10%, #1c2545 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, #17203a 0%, transparent 55%),
+      var(--ink);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
 
-        h1, h2, h3, h4 {
-            color: var(--text-color);
-        }
+  ::selection{ background:rgba(226,161,61,0.35); }
 
-        .card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
+  a{ color:var(--amber-hi); }
 
-        .form-group {
-            margin-bottom: 1rem;
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
+  /* ---------- layout shell ---------- */
+  .page{
+    max-width:1080px;
+    margin:0 auto;
+    padding:4.5rem 2rem 6rem;
+  }
 
-        input[type="file"], input[type="text"], input[type="number"], select {
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            color: var(--text-color);
-            padding: 0.75rem;
-            border-radius: 6px;
-            width: 100%;
-        }
+  .masthead{
+    border-bottom:1px solid var(--hairline);
+    padding-bottom:2rem;
+    margin-bottom:3rem;
+    animation: rise .7s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes rise{
+    from{ opacity:0; transform:translateY(10px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
 
-        button {
-            background-color: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: background-color 0.2s;
-            white-space: nowrap;
-        }
+  .masthead .kicker{
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:var(--amber-hi);
+    letter-spacing:0.02em;
+    margin-bottom:0.9rem;
+  }
 
-        button:hover {
-            background-color: var(--accent-hover);
-        }
+  .masthead h1{
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:clamp(2.1rem, 4vw, 2.9rem);
+    line-height:1.1;
+    margin:0 0 0.7rem;
+    color:var(--text);
+  }
 
-        .btn-gemini {
-            background-color: var(--gemini-color);
-        }
+  .masthead p{
+    font-size:1.02rem;
+    color:var(--text-dim);
+    max-width:52ch;
+    line-height:1.55;
+    margin:0;
+  }
 
-        .btn-gemini:hover {
-            background-color: var(--gemini-hover);
-        }
+  /* ---------- section scaffolding ---------- */
+  .section{
+    margin-bottom:2.75rem;
+  }
 
-        /* Conversational Chat Box Styles */
-        .chat-box {
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 1rem;
-            height: 380px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
+  .section-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:1rem;
+    margin-bottom:1.1rem;
+  }
 
-        .chat-message {
-            max-width: 80%;
-            padding: 0.85rem 1.1rem;
-            border-radius: 8px;
-            line-height: 1.5;
-            word-wrap: break-word;
-        }
+  .section-head h2{
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:1.35rem;
+    margin:0;
+    color:var(--text);
+  }
 
-        .chat-message.user {
-            align-self: flex-end;
-            background-color: var(--user-msg-bg);
-            border: 1px solid #2563eb;
-            color: #ffffff;
-        }
+  .section-head .count{
+    font-family:var(--mono);
+    font-size:0.8rem;
+    color:var(--text-faint);
+  }
 
-        .chat-message.assistant {
-            align-self: flex-start;
-            background-color: var(--bot-msg-bg);
-            border: 1px solid #6b21a8;
-            color: #ffffff;
-        }
+  .panel{
+    background:linear-gradient(180deg, var(--surface), var(--surface-2));
+    border:1px solid var(--hairline);
+    border-radius:var(--radius-card);
+    padding:1.6rem;
+  }
 
-        .chat-message .role-label {
-            font-size: 0.75rem;
-            font-weight: bold;
-            color: var(--subtext-color);
-            margin-bottom: 0.25rem;
-        }
+  /* ---------- form controls ---------- */
+  .row{
+    display:flex;
+    gap:0.75rem;
+    align-items:center;
+    flex-wrap:wrap;
+  }
 
-        .chunk-card {
-            background-color: var(--card-bg);
-            border-left: 4px solid var(--accent-color);
-            padding: 1rem;
-            margin-bottom: 1rem;
-            border-radius: 4px;
-        }
+  input[type="text"], input[type="number"], select{
+    background:var(--ink-2);
+    border:1px solid var(--hairline);
+    color:var(--text);
+    padding:0.7rem 0.85rem;
+    border-radius:2px;
+    font-family:var(--sans);
+    font-size:0.92rem;
+  }
+  input[type="text"]:focus, input[type="number"]:focus, select:focus{
+    outline:2px solid var(--amber);
+    outline-offset:1px;
+    border-color:var(--amber);
+  }
 
-        .chunk-meta {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.85rem;
-            color: var(--subtext-color);
-            margin-bottom: 0.5rem;
-        }
+  input[type="text"]{ flex:1; min-width:200px; }
 
-        .score-badge {
-            background-color: var(--success-color);
-            color: white;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            font-weight: bold;
-        }
+  button{
+    font-family:var(--sans);
+    font-weight:600;
+    font-size:0.88rem;
+    padding:0.7rem 1.2rem;
+    border-radius:2px;
+    border:1px solid transparent;
+    cursor:pointer;
+    background:var(--amber);
+    color:#241705;
+    transition: filter .15s ease, transform .05s ease;
+    white-space:nowrap;
+  }
+  button:hover{ filter:brightness(1.08); }
+  button:active{ transform:translateY(1px); }
 
-        .document-list-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem 0;
-            border-bottom: 1px solid var(--border-color);
-        }
+  button.ghost{
+    background:transparent;
+    border:1px solid var(--hairline);
+    color:var(--text);
+  }
+  button.ghost:hover{ border-color:var(--amber); color:var(--amber-hi); filter:none; }
 
-        .stats-pills {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 0.4rem;
-            flex-wrap: wrap;
-        }
+  button.danger{
+    background:transparent;
+    border:1px solid rgba(201,106,90,0.5);
+    color:var(--rose);
+    padding:0.45rem 0.85rem;
+    font-size:0.8rem;
+  }
+  button.danger:hover{ background:rgba(201,106,90,0.12); filter:none; }
 
-        .stat-pill {
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            color: var(--subtext-color);
-        }
+  /* file input dropzone-ish */
+  .file-field{
+    flex:1;
+    min-width:220px;
+    position:relative;
+  }
+  input[type="file"]{
+    width:100%;
+    color:var(--text-dim);
+    font-family:var(--sans);
+    font-size:0.86rem;
+    background:var(--ink-2);
+    border:1px dashed var(--hairline);
+    border-radius:2px;
+    padding:0.65rem 0.8rem;
+  }
+  input[type="file"]::file-selector-button{
+    background:var(--surface-2);
+    color:var(--text);
+    border:1px solid var(--hairline);
+    border-radius:2px;
+    padding:0.4rem 0.7rem;
+    margin-right:0.75rem;
+    font-family:var(--sans);
+    cursor:pointer;
+  }
 
-        .delete-btn {
-            background-color: #ef4444;
-            padding: 0.4rem 0.8rem;
-        }
+  #uploadStatus{
+    margin-top:1rem;
+    font-size:0.88rem;
+    color:var(--text-dim);
+  }
+  #uploadStatus .ok{ color:var(--teal); }
+  #uploadStatus .err{ color:var(--rose); }
 
-        .delete-btn:hover {
-            background-color: #dc2626;
-        }
+  /* ---------- document ledger ---------- */
+  .ledger-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:1rem;
+    padding:0.95rem 0;
+    border-bottom:1px solid var(--hairline);
+  }
+  .ledger-row:last-child{ border-bottom:none; }
 
-        .session-info {
-            font-size: 0.85rem;
-            color: var(--subtext-color);
-        }
-    </style>
+  .ledger-row .doc-name{
+    font-family:var(--serif);
+    font-size:1.05rem;
+    color:var(--text);
+  }
+  .empty-state{
+    color:var(--text-faint);
+    font-size:0.92rem;
+    padding:1.2rem 0;
+  }
+
+  /* ---------- raw search ---------- */
+  #searchResults{
+    margin-top:1.1rem;
+  }
+  .chunk-card{
+    background:var(--ink-2);
+    border-left:3px solid var(--amber);
+    border-radius:2px;
+    padding:0.9rem 1.05rem;
+    margin-bottom:0.75rem;
+  }
+  .chunk-text{
+    font-size:0.9rem;
+    color:var(--text-dim);
+    line-height:1.5;
+  }
+
+  /* =====================================================
+     FLOATING CHAT WIDGET
+     ===================================================== */
+
+  #chatFab{
+    position:fixed;
+    bottom:1.75rem;
+    right:1.75rem;
+    width:60px;
+    height:60px;
+    border-radius:50%;
+    background:var(--amber);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(226,161,61,0.25);
+    cursor:pointer;
+    z-index:1000;
+    padding:0;
+    transition: transform .15s ease, filter .15s ease;
+  }
+  #chatFab:hover{ transform:scale(1.06); filter:brightness(1.05); }
+  #chatFab svg{ width:26px; height:26px; }
+  #chatFab .ico-open{ display:block; }
+  #chatFab .ico-close{ display:none; }
+  #chatFab.is-open .ico-open{ display:none; }
+  #chatFab.is-open .ico-close{ display:block; }
+
+  #chatNudge{
+    position:fixed;
+    bottom:2.4rem;
+    right:5.6rem;
+    background:var(--surface-2);
+    border:1px solid var(--hairline);
+    color:var(--text);
+    padding:0.65rem 0.95rem;
+    border-radius:6px;
+    font-size:0.85rem;
+    max-width:220px;
+    z-index:999;
+    box-shadow:0 6px 20px rgba(0,0,0,0.35);
+    animation: rise .5s ease .9s both;
+  }
+  #chatNudge::after{
+    content:"";
+    position:absolute;
+    right:-6px;
+    bottom:16px;
+    width:12px;
+    height:12px;
+    background:var(--surface-2);
+    border-right:1px solid var(--hairline);
+    border-bottom:1px solid var(--hairline);
+    transform:rotate(-45deg);
+  }
+  #chatNudge button{
+    background:none;
+    border:none;
+    color:var(--text-faint);
+    font-size:0.72rem;
+    padding:0;
+    margin-top:0.4rem;
+    cursor:pointer;
+  }
+  #chatNudge button:hover{ color:var(--amber-hi); }
+
+  #chatPanel{
+    position:fixed;
+    bottom:6rem;
+    right:1.75rem;
+    width:392px;
+    max-width:calc(100vw - 2rem);
+    height:min(600px, calc(100vh - 8.5rem));
+    background:linear-gradient(180deg, var(--surface), var(--ink-2));
+    border:1px solid var(--hairline);
+    border-radius:6px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+    display:flex;
+    flex-direction:column;
+    z-index:999;
+    overflow:hidden;
+    opacity:0;
+    transform:translateY(16px) scale(0.98);
+    pointer-events:none;
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  #chatPanel.is-open{
+    opacity:1;
+    transform:translateY(0) scale(1);
+    pointer-events:auto;
+  }
+
+  .chat-header{
+    padding:1rem 1.1rem 0.9rem;
+    border-bottom:1px solid var(--hairline);
+    background:rgba(0,0,0,0.15);
+  }
+  .chat-header-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:0.7rem;
+  }
+  .chat-header h3{
+    font-family:var(--serif);
+    font-size:1.08rem;
+    margin:0;
+    color:var(--text);
+  }
+  .chat-header .lamp{
+    width:8px; height:8px;
+    border-radius:50%;
+    background:var(--amber);
+    display:inline-block;
+    margin-right:0.5rem;
+    box-shadow:0 0 8px 2px rgba(226,161,61,0.6);
+  }
+
+  .chat-controls{
+    display:flex;
+    align-items:center;
+    gap:0.5rem;
+  }
+  .chat-mode-label{
+    flex:1;
+    font-family:var(--serif);
+    font-size:0.92rem;
+    color:var(--text-dim);
+  }
+  .chat-controls button{
+    font-size:0.78rem;
+    padding:0.45rem 0.7rem;
+  }
+
+  .session-info{
+    font-family:var(--mono);
+    font-size:0.7rem;
+    color:var(--text-faint);
+    margin-top:0.55rem;
+  }
+
+  .chat-box{
+    flex:1;
+    overflow-y:auto;
+    padding:1rem 1.1rem;
+    display:flex;
+    flex-direction:column;
+    gap:0.85rem;
+  }
+  .chat-box::-webkit-scrollbar{ width:6px; }
+  .chat-box::-webkit-scrollbar-thumb{ background:var(--hairline); border-radius:3px; }
+
+  .chat-message{
+    max-width:84%;
+    padding:0.7rem 0.9rem;
+    border-radius:8px;
+    line-height:1.5;
+    font-size:0.89rem;
+    word-wrap:break-word;
+  }
+  .chat-message.user{
+    align-self:flex-end;
+    background:rgba(226,161,61,0.16);
+    border:1px solid rgba(226,161,61,0.35);
+    color:var(--text);
+    border-bottom-right-radius:2px;
+  }
+  .chat-message.assistant{
+    align-self:flex-start;
+    background:var(--surface-2);
+    border:1px solid var(--hairline);
+    color:var(--text);
+    border-bottom-left-radius:2px;
+  }
+  .chat-message .role-label{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    color:var(--text-faint);
+    margin-bottom:0.3rem;
+  }
+  .chat-empty{
+    margin:auto;
+    text-align:center;
+    color:var(--text-faint);
+    font-size:0.86rem;
+    padding:1rem;
+  }
+
+  /* typing / thinking indicator */
+  .thinking-bubble{
+    align-self:flex-start;
+    display:flex;
+    align-items:center;
+    gap:0.6rem;
+    background:var(--surface-2);
+    border:1px solid var(--hairline);
+    border-bottom-left-radius:2px;
+    border-radius:8px;
+    padding:0.65rem 0.9rem;
+    max-width:84%;
+  }
+  .thinking-dots{
+    display:flex;
+    gap:4px;
+  }
+  .thinking-dots span{
+    width:6px; height:6px;
+    border-radius:50%;
+    background:var(--amber);
+    animation: bounce 1.1s infinite ease-in-out;
+  }
+  .thinking-dots span:nth-child(2){ animation-delay:0.15s; }
+  .thinking-dots span:nth-child(3){ animation-delay:0.3s; }
+  @keyframes bounce{
+    0%, 60%, 100%{ transform:translateY(0); opacity:0.5; }
+    30%{ transform:translateY(-4px); opacity:1; }
+  }
+  .thinking-label{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    color:var(--text-faint);
+  }
+
+  .chat-input-row{
+    padding:0.85rem 1.1rem 1.05rem;
+    border-top:1px solid var(--hairline);
+    background:rgba(0,0,0,0.15);
+  }
+  .chat-input-row .row{
+    gap:0.5rem;
+    flex-wrap:nowrap;
+  }
+  #ragQuery{ font-size:0.88rem; }
+  .chat-input-row button{ padding:0.7rem 1rem; }
+
+  @media (max-width:520px){
+    .page{ padding:2.5rem 1.1rem 5rem; }
+    #chatPanel{
+      right:0.6rem;
+      left:0.6rem;
+      width:auto;
+      bottom:5.6rem;
+    }
+    #chatFab{ right:1.1rem; bottom:1.1rem; }
+    #chatNudge{ right:1.1rem; }
+  }
+</style>
 </head>
 <body>
 
-<div class="container">
-    <h1>📄 Document Engine & Gemini RAG</h1>
+<div class="page">
 
-    <!-- 1. Upload Document Card -->
-    <div class="card">
-        <h2>1. Upload & Vector Processing</h2>
-        <form id="uploadForm">
-            <div class="form-group">
-                <input type="file" id="fileInput" required>
-                <button type="submit">Upload & Vectorize</button>
-            </div>
-        </form>
-        <div id="uploadStatus"></div>
+  <div class="masthead">
+    <div class="kicker">mini document processing system — v2.0</div>
+    <h1>The Reading Room</h1>
+    <p>Upload documents to chunk, embed, and index them. Search the archive directly, or open the assistant to ask questions in plain language.</p>
+  </div>
+
+  <!-- 1. Upload -->
+  <section class="section" id="upload-section">
+    <div class="section-head">
+      <h2>Add to the archive</h2>
     </div>
-
-    <!-- 2. Stateful Conversational RAG Chat Card -->
-    <div class="card">
-        <h2>2. Conversational Chat (RAG with Memory)</h2>
-        
-        <!-- Mode & Session Controls -->
-        <div class="form-group">
-            <select id="chatModeSelect" onchange="handleModeChange()">
-                <option value="single">Option 1: Single Active Session</option>
-                <option value="all">Option 2: All Sessions Combined (Global History)</option>
-            </select>
-            <button id="newSessionBtn" onclick="createNewSession()">➕ New Chat Session</button>
+    <div class="panel">
+      <form id="uploadForm">
+        <div class="row">
+          <div class="file-field">
+            <input type="file" id="fileInput" required>
+          </div>
+          <button type="submit">Upload &amp; vectorize</button>
         </div>
-        <div class="session-info" id="currentSessionDisplay" style="margin-bottom: 1rem;">
-            Active Session: None (Click New Chat or Send a message)
-        </div>
-
-        <!-- Chat History Thread Box -->
-        <div id="chatThread" class="chat-box">
-            <div style="color: var(--subtext-color); text-align: center; margin: auto;">
-                Start a session and enter a prompt to begin conversing.
-            </div>
-        </div>
-
-        <div class="form-group">
-            <input type="text" id="ragQuery" placeholder="Ask follow-up questions..." required>
-            <input type="number" id="ragTopK" value="3" min="1" max="10" style="width: 80px;" title="Context Chunks Limit">
-            <button class="btn-gemini" onclick="performStatefulChat()">Send ✨</button>
-        </div>
-        
-        <!-- Sources Container -->
-        <div id="ragSources" style="margin-top: 1rem;"></div>
+      </form>
+      <div id="uploadStatus"></div>
     </div>
+  </section>
 
-    <!-- 3. Semantic Vector Search Card -->
-    <div class="card">
-        <h2>3. Raw Chunk Vector Search</h2>
-        <div class="form-group">
-            <input type="text" id="searchQuery" placeholder="Search vector store for specific text..." required>
-            <input type="number" id="topK" value="3" min="1" max="10" style="width: 80px;">
-            <button onclick="performSearch()">Search Chunks</button>
-        </div>
-        <div id="searchResults" style="display: none;" class="chat-box"></div>
+  <!-- 3. Raw chunk vector search -->
+  <section class="section" id="search-section">
+    <div class="section-head">
+      <h2>Search the index</h2>
     </div>
+    <div class="panel">
+      <div class="row">
+        <input type="text" id="searchQuery" placeholder="Search vector store for specific text…" required>
+        <button onclick="performSearch()">Search chunks</button>
+      </div>
+      <div id="searchResults" style="display:none;"></div>
+    </div>
+  </section>
 
-    <!-- 4. Stored Documents Card -->
-    <div class="card">
-        <h2>4. Stored Documents</h2>
-        <button onclick="loadDocuments()">Refresh Document List</button>
-        <div id="documentList" style="margin-top: 1rem;"></div>
+  <!-- 4. Stored documents -->
+  <section class="section" id="documents-section">
+    <div class="section-head">
+      <h2>Stored documents</h2>
+      <button class="ghost" onclick="loadDocuments()">Refresh</button>
     </div>
+    <div class="panel">
+      <div id="documentList"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ FLOATING CHAT WIDGET ============ -->
+
+<div id="chatNudge">
+  Questions about a document? Ask the assistant.
+  <br>
+  <button onclick="dismissNudge()">Dismiss</button>
+</div>
+
+<button id="chatFab" onclick="toggleChatPanel()" aria-label="Open chat assistant">
+  <svg class="ico-open" viewBox="0 0 24 24" fill="none" stroke="#241705" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+  </svg>
+  <svg class="ico-close" viewBox="0 0 24 24" fill="none" stroke="#241705" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"></line>
+    <line x1="6" y1="6" x2="18" y2="18"></line>
+  </svg>
+</button>
+
+<div id="chatPanel">
+  <div class="chat-header">
+    <div class="chat-header-top">
+      <h3><span class="lamp"></span>Reading Room Assistant</h3>
+    </div>
+    <div class="chat-controls">
+      <span class="chat-mode-label">Ask about your documents</span>
+      <button class="ghost" id="newSessionBtn" onclick="createNewSession()">New chat</button>
+    </div>
+    <div class="session-info" id="currentSessionDisplay">No active session</div>
+  </div>
+
+  <div id="chatThread" class="chat-box">
+    <div class="chat-empty">Start a session and enter a prompt to begin conversing.</div>
+  </div>
+
+  <div class="chat-input-row">
+    <div class="row">
+      <input type="text" id="ragQuery" placeholder="Ask a question…" required>
+      <button onclick="performStatefulChat()">Send</button>
+    </div>
+  </div>
 </div>
 
 <script>
     const API_BASE = "http://localhost:9000";
     let activeSessionId = null;
+
+    // ---------- Chat widget open/close ----------
+    function toggleChatPanel(forceOpen) {
+        const panel = document.getElementById("chatPanel");
+        const fab = document.getElementById("chatFab");
+        const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !panel.classList.contains("is-open");
+        panel.classList.toggle("is-open", shouldOpen);
+        fab.classList.toggle("is-open", shouldOpen);
+        if (shouldOpen) {
+            dismissNudge();
+            document.getElementById("ragQuery").focus();
+        }
+    }
+
+    function dismissNudge() {
+        const nudge = document.getElementById("chatNudge");
+        if (nudge) nudge.style.display = "none";
+    }
 
     // Handle Document Upload
     document.getElementById("uploadForm").addEventListener("submit", async (e) => {
@@ -276,7 +633,7 @@
         const formData = new FormData();
         formData.append("file", fileInput.files[0]);
 
-        statusDiv.innerHTML = "<p>Processing, chunking, and embedding document...</p>";
+        statusDiv.innerHTML = "<p>Processing, chunking, and embedding document…</p>";
 
         try {
             const response = await fetch(`${API_BASE}/documents/upload`, {
@@ -286,43 +643,17 @@
 
             const data = await response.json();
             if (response.ok) {
-                statusDiv.innerHTML = `<p style="color: var(--success-color);">${data.message} (ID: ${data.document_id}, Chunks: ${data.total_chunks})</p>`;
+                statusDiv.innerHTML = `<p class="ok">"${data.filename}" uploaded and indexed.</p>`;
                 loadDocuments();
             } else {
-                statusDiv.innerHTML = `<p style="color: #ef4444;">Error: ${data.detail}</p>`;
+                statusDiv.innerHTML = `<p class="err">Error: ${data.detail}</p>`;
             }
         } catch (err) {
-            statusDiv.innerHTML = `<p style="color: #ef4444;">Upload failed: ${err.message}</p>`;
+            statusDiv.innerHTML = `<p class="err">Upload failed: ${err.message}</p>`;
         }
     });
 
-    // Handle Dropdown Selection Change
-    function handleModeChange() {
-        const mode = document.getElementById("chatModeSelect").value;
-        const newBtn = document.getElementById("newSessionBtn");
-        const display = document.getElementById("currentSessionDisplay");
-        const threadDiv = document.getElementById("chatThread");
-        
-        threadDiv.innerHTML = "";
-        document.getElementById("ragSources").innerHTML = "";
-
-        if (mode === "all") {
-            newBtn.style.display = "none";
-            display.innerText = "Mode: All Sessions Combined (Retrieving context across all saved sessions)";
-            loadAllSessionsMessages();
-        } else {
-            newBtn.style.display = "inline-block";
-            if (activeSessionId) {
-                display.innerText = `Active Session: ${activeSessionId}`;
-                loadSessionMessages(activeSessionId);
-            } else {
-                display.innerText = "Active Session: None (Click New Chat)";
-                threadDiv.innerHTML = `<div style="color: var(--subtext-color); text-align: center; margin: auto;">Start a session and enter a prompt to begin conversing.</div>`;
-            }
-        }
-    }
-
-    // 1. Create a New Session (Single Mode)
+    // 1. Create a New Session
     async function createNewSession() {
         try {
             const response = await fetch(`${API_BASE}/chats`, {
@@ -334,9 +665,8 @@
             if (response.ok) {
                 const data = await response.json();
                 activeSessionId = data.id;
-                document.getElementById("currentSessionDisplay").innerText = `Active Session: ${activeSessionId}`;
-                document.getElementById("chatThread").innerHTML = "";
-                document.getElementById("ragSources").innerHTML = "";
+                document.getElementById("currentSessionDisplay").innerText = "New conversation started";
+                document.getElementById("chatThread").innerHTML = `<div class="chat-empty">Start a session and enter a prompt to begin conversing.</div>`;
             } else {
                 alert("Failed to create chat session.");
             }
@@ -345,7 +675,7 @@
         }
     }
 
-    // Load Single Session Messages
+    // Load Session Messages
     async function loadSessionMessages(sessionId) {
         try {
             const response = await fetch(`${API_BASE}/chats/${sessionId}/messages`);
@@ -363,42 +693,17 @@
         }
     }
 
-    // Load Combined Messages from All Sessions
-    async function loadAllSessionsMessages() {
-        try {
-            const response = await fetch(`${API_BASE}/chats/messages/all`);
-            if (response.ok) {
-                const messages = await response.json();
-                const threadDiv = document.getElementById("chatThread");
-                threadDiv.innerHTML = "";
-
-                if (messages.length === 0) {
-                    threadDiv.innerHTML = `<div style="color: var(--subtext-color); text-align: center; margin: auto;">No previous messages found across any session.</div>`;
-                    return;
-                }
-
-                messages.forEach(msg => {
-                    appendMessageToThread(msg.role, msg.content, msg.session_id);
-                });
-            }
-        } catch (err) {
-            console.error("Failed to load all sessions history", err);
-        }
-    }
-
-    function appendMessageToThread(role, text, sessionId = null) {
+    function appendMessageToThread(role, text) {
         const threadDiv = document.getElementById("chatThread");
+        const emptyState = threadDiv.querySelector(".chat-empty");
+        if (emptyState) emptyState.remove();
+
         const msgDiv = document.createElement("div");
         msgDiv.className = `chat-message ${role}`;
 
         const labelDiv = document.createElement("div");
         labelDiv.className = "role-label";
-        
-        let labelText = role === "user" ? "You" : "Chatbot";
-        if (sessionId) {
-            labelText += ` (Session: ${sessionId})`;
-        }
-        labelDiv.innerText = labelText;
+        labelDiv.innerText = role === "user" ? "You" : "Assistant";
 
         const contentDiv = document.createElement("div");
         contentDiv.innerHTML = text.replace(/\n/g, "<br>");
@@ -410,32 +715,70 @@
         threadDiv.scrollTop = threadDiv.scrollHeight;
     }
 
+    // ---------- Typing / thinking indicator ----------
+    const thinkingPhrases = [
+        "Consulting the archive…",
+        "Reading the retrieved passages…",
+        "Weighing the evidence…",
+        "Drafting a reply…"
+    ];
+    let thinkingInterval = null;
+
+    function showTypingIndicator() {
+        const threadDiv = document.getElementById("chatThread");
+        const emptyState = threadDiv.querySelector(".chat-empty");
+        if (emptyState) emptyState.remove();
+
+        const bubble = document.createElement("div");
+        bubble.id = "typingIndicator";
+        bubble.className = "thinking-bubble";
+        bubble.innerHTML = `
+            <div class="thinking-dots"><span></span><span></span><span></span></div>
+            <div class="thinking-label" id="thinkingLabel">${thinkingPhrases[0]}</div>
+        `;
+        threadDiv.appendChild(bubble);
+        threadDiv.scrollTop = threadDiv.scrollHeight;
+
+        let i = 0;
+        thinkingInterval = setInterval(() => {
+            i = (i + 1) % thinkingPhrases.length;
+            const label = document.getElementById("thinkingLabel");
+            if (label) label.innerText = thinkingPhrases[i];
+        }, 1600);
+    }
+
+    function hideTypingIndicator() {
+        if (thinkingInterval) {
+            clearInterval(thinkingInterval);
+            thinkingInterval = null;
+        }
+        const bubble = document.getElementById("typingIndicator");
+        if (bubble) bubble.remove();
+    }
+
+    // Retrieval depth for RAG context — fixed server-side default, not user-configurable.
+    const DEFAULT_TOP_K = 5;
+
     // Perform Stateful RAG Chat
     async function performStatefulChat() {
         const queryInput = document.getElementById("ragQuery");
         const query = queryInput.value.trim();
-        const topK = parseInt(document.getElementById("ragTopK").value);
-        const sourcesDiv = document.getElementById("ragSources");
-        const mode = document.getElementById("chatModeSelect").value;
 
         if (!query) return;
 
-        if (mode === "single" && !activeSessionId) {
+        if (!activeSessionId) {
             await createNewSession();
         }
 
-        appendMessageToThread("user", query, mode === "all" ? "Combined" : null);
+        appendMessageToThread("user", query);
         queryInput.value = "";
+        showTypingIndicator();
 
         const payload = {
             query: query,
-            top_k: topK,
-            mode: mode
+            top_k: DEFAULT_TOP_K,
+            session_id: activeSessionId
         };
-
-        if (mode === "single") {
-            payload.session_id = activeSessionId;
-        }
 
         try {
             const response = await fetch(`${API_BASE}/documents/chat-memory`, {
@@ -445,70 +788,58 @@
             });
 
             const data = await response.json();
+            hideTypingIndicator();
 
             if (response.ok) {
-                appendMessageToThread("assistant", data.answer, mode === "all" ? "Combined" : null);
-
-                let sourcesHtml = `<h4>Reference Sources (${data.sources.length}):</h4>`;
-                data.sources.forEach(src => {
-                    sourcesHtml += `
-                        <div class="chunk-card">
-                            <div class="chunk-meta">
-                                <span>Doc ID: ${src.document_id} (Chunk #${src.chunk_index})</span>
-                                <span class="score-badge">Score: ${src.similarity_score}</span>
-                            </div>
-                        </div>
-                    `;
-                });
-                sourcesDiv.innerHTML = sourcesHtml;
+                appendMessageToThread("assistant", data.answer);
             } else {
-                appendMessageToThread("assistant", `❌ Error: ${data.detail}`);
+                appendMessageToThread("assistant", `Error: ${data.detail}`);
             }
         } catch (err) {
-            appendMessageToThread("assistant", `❌ Request failed: ${err.message}`);
+            hideTypingIndicator();
+            appendMessageToThread("assistant", `Request failed: ${err.message}`);
         }
     }
 
     // Handle Semantic Search
     async function performSearch() {
         const query = document.getElementById("searchQuery").value.trim();
-        const topK = parseInt(document.getElementById("topK").value);
         const resultsDiv = document.getElementById("searchResults");
 
         if (!query) return;
 
         resultsDiv.style.display = "block";
-        resultsDiv.innerHTML = "<p>Searching Qdrant vector store...</p>";
+        resultsDiv.innerHTML = `
+            <div class="thinking-bubble" style="margin-top:1rem;">
+                <div class="thinking-dots"><span></span><span></span><span></span></div>
+                <div class="thinking-label">Searching the vector store…</div>
+            </div>`;
 
         try {
             const response = await fetch(`${API_BASE}/documents/search`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: query, top_k: topK })
+                body: JSON.stringify({ query: query, top_k: DEFAULT_TOP_K })
             });
 
             const data = await response.json();
 
             if (response.ok && data.results.length > 0) {
-                resultsDiv.innerHTML = `<h3>Results for "${data.query}"</h3>`;
+                resultsDiv.innerHTML = `<h3 style="font-family:var(--serif); font-weight:600; font-size:1.05rem; margin:1rem 0 0.75rem;">Results for "${data.query}"</h3>`;
                 data.results.forEach(res => {
                     resultsDiv.innerHTML += `
                         <div class="chunk-card">
-                            <div class="chunk-meta">
-                                <span>Doc ID: ${res.document_id} (Chunk #${res.chunk_index})</span>
-                                <span class="score-badge">Score: ${res.similarity_score}</span>
-                            </div>
-                            <div>"${res.chunk_text}"</div>
+                            <div class="chunk-text">"${res.chunk_text}"</div>
                         </div>
                     `;
                 });
-            } else if (data.results.length === 0) {
-                resultsDiv.innerHTML = "<p>No matching text chunks found.</p>";
+            } else if (data.results && data.results.length === 0) {
+                resultsDiv.innerHTML = `<div class="empty-state">No matching text chunks found.</div>`;
             } else {
-                resultsDiv.innerHTML = `<p style="color: #ef4444;">Error: ${data.detail}</p>`;
+                resultsDiv.innerHTML = `<div class="empty-state" style="color:var(--rose);">Error: ${data.detail}</div>`;
             }
         } catch (err) {
-            resultsDiv.innerHTML = `<p style="color: #ef4444;">Search request failed: ${err.message}</p>`;
+            resultsDiv.innerHTML = `<div class="empty-state" style="color:var(--rose);">Search request failed: ${err.message}</div>`;
         }
     }
 
@@ -520,35 +851,18 @@
             const docs = await response.json();
 
             if (docs.length === 0) {
-                listDiv.innerHTML = "<p>No documents stored in database.</p>";
+                listDiv.innerHTML = `<div class="empty-state">No documents stored yet. Upload one above to begin.</div>`;
                 return;
             }
 
-            listDiv.innerHTML = docs.map(doc => {
-                const stats = doc.stats || {};
-                const words = stats.total_words ?? 0;
-                const chars = stats.total_characters ?? 0;
-                const sentences = stats.total_sentences ?? 0;
-                const paragraphs = stats.total_paragraphs ?? 0;
-
-                return `
-                    <div class="document-list-item">
-                        <div>
-                            <strong>${doc.filename}</strong> (${doc.file_type})<br>
-                            <small style="color: var(--subtext-color);">ID: ${doc.id}</small>
-                            <div class="stats-pills">
-                                <span class="stat-pill">📝 Words: ${words}</span>
-                                <span class="stat-pill">🔤 Chars: ${chars}</span>
-                                <span class="stat-pill">💬 Sentences: ${sentences}</span>
-                                <span class="stat-pill">📄 Paragraphs: ${paragraphs}</span>
-                            </div>
-                        </div>
-                        <button class="delete-btn" onclick="deleteDocument('${doc.id}')">Delete</button>
+            listDiv.innerHTML = docs.map(doc => `
+                    <div class="ledger-row">
+                        <span class="doc-name">${doc.filename}</span>
+                        <button class="danger" onclick="deleteDocument('${doc.id}')">Delete</button>
                     </div>
-                `;
-            }).join("");
+                `).join("");
         } catch (err) {
-            listDiv.innerHTML = `<p style="color: #ef4444;">Failed to load documents.</p>`;
+            listDiv.innerHTML = `<div class="empty-state" style="color:var(--rose);">Failed to load documents.</div>`;
         }
     }
 

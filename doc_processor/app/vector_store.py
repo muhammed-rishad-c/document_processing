@@ -22,6 +22,17 @@ def init_qdrant():
 def get_embedding(text: str) -> list[float]:
     return encoder.encode(text).tolist()
 
+
+def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    """Encodes multiple texts in a single model call. SentenceTransformer
+    batches internally (one matrix operation instead of N separate calls),
+    which is dramatically faster for bulk work like embedding every chunk
+    of a newly uploaded document. Does not change get_embedding() or any
+    of its existing callers (e.g. search_similar_chunks) — this is purely
+    additive for the upload path. Preserves input order, so
+    zip(chunks, embeddings) stays correctly aligned."""
+    return encoder.encode(texts).tolist()
+
     
 def store_chunk_vector(chunks_data: list[dict]):
     points = []
