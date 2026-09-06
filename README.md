@@ -29,9 +29,6 @@ doc_processor/
 │   ├── vector_store.py            # Qdrant init/upsert/search, embedding calls
 │   ├── llm_service.py             # RAG answer generation, context building, token usage
 │   ├── analytics.py               # request logging, /analytics aggregation
-│   ├── token_vector_export.py     # per-token CSV export (background/queued task)
-│   ├── queue_config.py            # RQ/Redis queue setup with fallback flag
-│   ├── worker.py                  # standalone RQ worker process
 │   ├── models.py / schemas.py / database.py
 │   ├── analytics_log.jsonl        # append-only request/token/timing log
 │   └── token_vectors/             # per-document token+vector CSV exports
