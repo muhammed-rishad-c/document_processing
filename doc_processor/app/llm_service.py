@@ -1,51 +1,86 @@
 import os
 import time
+
 from dotenv import load_dotenv
-from openai import OpenAI
+
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage
+
 from .service import count_token
 
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPEN_API_KEY")
 
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
-)
-
 MAX_CONTEXT_TOKENS = 4000
 MODEL_NAME = "openrouter/free"
+
 EXTRA_HEADERS = {
     "HTTP-Referer": "http://localhost:9000",
     "X-Title": "LiquidLab RAG App",
 }
 
-def reduce_chat_history(chat_history: list[dict], max_history_tokens: int=1200) -> list[dict]:
+# LangChain's ChatOpenAI wraps the same underlying OpenAI SDK client,
+# pointed at OpenRouter via base_url exactly as the raw client was.
+llm = ChatOpenAI(
+    model=MODEL_NAME,
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY,
+    temperature=0.3,
+    default_headers=EXTRA_HEADERS,
+)
+
+# LCEL chain: prompt -> llm. No output parser here on purpose —
+# a parser would strip the AIMessage's .usage_metadata, which we need
+# for input_tokens/output_tokens reporting (read by main.py + analytics.py).
+rag_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", "{system_prompt}"),
+        MessagesPlaceholder("chat_history"),
+        ("user", "{user_query}"),
+    ]
+)
+rag_chain = rag_prompt | llm
+
+
+def _to_lc_messages(history: list[dict]) -> list:
+    """Converts our plain role/content dicts into LangChain message objects.
+    Passed via MessagesPlaceholder rather than string-templated, so message
+    content is never re-parsed for {..} placeholders — safe even if a past
+    turn happens to contain literal braces."""
+    lc_messages = []
+    for msg in history:
+        role = msg.get("role")
+        content = msg.get("content", "")
+        if role == "user":
+            lc_messages.append(HumanMessage(content=content))
+        else:
+            lc_messages.append(AIMessage(content=content))
+    return lc_messages
+
+
+def reduce_chat_history(chat_history: list[dict], max_history_tokens: int = 1200) -> list[dict]:
     if not chat_history:
         return []
-    
-    total_tokens = sum(count_token(msg.get("content", "")) for msg in chat_history)
 
-    
+    total_tokens = sum(count_token(msg.get("content", "")) for msg in chat_history)
     if total_tokens <= max_history_tokens:
         return chat_history
-    
+
     recent_messages = chat_history[-4:]
     older_messages = chat_history[:-4]
-    
+
     if older_messages:
         summary_lines = []
         for msg in older_messages:
             role_label = "User" if msg.get("role") == "user" else "Assistant"
-            
             snippet = msg.get("content", "")[:120].replace("\n", " ")
             summary_lines.append(f"{role_label}: {snippet}...")
 
         condensed_text = (
             "[Prior Conversation Summary Block]:\n" + "\n".join(summary_lines)
         )
-
-        
         return [{"role": "assistant", "content": condensed_text}] + recent_messages
 
     return recent_messages
@@ -56,13 +91,9 @@ def build_safe_context(
     query_text: str,
     chat_history: list[dict] | None = None,
 ) -> tuple[str, int]:
-    
     selected_chunks = []
-
-    
     base_tokens = 200 + count_token(query_text)
 
-    
     if chat_history:
         for msg in chat_history:
             base_tokens += count_token(msg.get("content", ""))
@@ -74,9 +105,7 @@ def build_safe_context(
         token_count = count_token(chunk_text)
 
         if current_tokens + token_count > MAX_CONTEXT_TOKENS:
-            print(
-                f"Token limit target reached. Omitting remaining chunks starting from index {idx}."
-            )
+            print(f"Token limit target reached. Omitting remaining chunks starting from index {idx}.")
             break
 
         selected_chunks.append(chunk_text)
@@ -84,6 +113,7 @@ def build_safe_context(
 
     combined_context = "".join(selected_chunks)
     return combined_context, current_tokens
+ 
 
 def generate_rag_answer_with_memory(
     user_query: str,
@@ -91,33 +121,16 @@ def generate_rag_answer_with_memory(
     chat_history: list[dict] | None = None,
 ) -> dict:
     chat_history = chat_history or []
-    
+
     t_ctx_start = time.perf_counter()
-
     reduced_history = reduce_chat_history(chat_history)
-
-    context_str, context_tokens = build_safe_context(     
-        retrieved_chunks, user_query, reduced_history
-    )
+    context_str, context_tokens = build_safe_context(retrieved_chunks, user_query, reduced_history)
     t_ctx_end = time.perf_counter()
-    
-    
 
-    summary_keywords = [
-        "summarize",
-        "summary",
-        "recap",
-        "overview",
-        "main points",
-        "about",
-    ]
-    is_summary_query = any(
-        kw in user_query.lower() for kw in summary_keywords
-    )
+    summary_keywords = ["summarize", "summary", "recap", "overview", "main points", "about"]
+    is_summary_query = any(kw in user_query.lower() for kw in summary_keywords)
 
-    doc_context = (
-        context_str if context_str else "No specific document context found."
-    )
+    doc_context = context_str if context_str else "No specific document context found."
 
     if is_summary_query:
         system_prompt = (
@@ -153,40 +166,33 @@ def generate_rag_answer_with_memory(
             f"--- DOCUMENT CONTEXT ---\n{doc_context}\n"
         )
 
-    messages = [{"role": "system", "content": system_prompt}]
-    for msg in reduced_history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": user_query})
-
     t_llm_start = time.perf_counter()
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=messages,
-        extra_headers=EXTRA_HEADERS,
-        temperature=0.3,
+    ai_message = rag_chain.invoke(
+        {
+            "system_prompt": system_prompt,
+            "chat_history": _to_lc_messages(reduced_history),
+            "user_query": user_query,
+        }
     )
     t_llm_end = time.perf_counter()
-    
-    
 
-    raw_text = response.choices[0].message.content.strip()
-
+    raw_text = ai_message.content.strip()
     cleaned_lines = [
         line
         for line in raw_text.splitlines()
         if not line.strip().startswith(("User Safety:", "Response Safety:"))
     ]
     cleaned_text = "\n".join(cleaned_lines).strip()
-
     if not cleaned_text:
         cleaned_text = "I cannot find the answer in the provided document context."
 
-    usage = response.usage
+    usage = ai_message.usage_metadata or {}
+
     return {
         "text": cleaned_text,
-        "input_tokens": usage.prompt_tokens if usage else 0,
-        "output_tokens": usage.completion_tokens if usage else 0,
-        "context_tokens": context_tokens,       
-        "context_prep_ms": round((t_ctx_end - t_ctx_start) * 1000, 2),      
-        "llm_generation_ms": round((t_llm_end - t_llm_start) * 1000, 2),   
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
+        "context_tokens": context_tokens,
+        "context_prep_ms": round((t_ctx_end - t_ctx_start) * 1000, 2),
+        "llm_generation_ms": round((t_llm_end - t_llm_start) * 1000, 2),
     }

@@ -12,4 +12,7 @@ streamlit
 tiktoken
 openai
 pymupdf
-
+langchain-huggingface
+langchain-qdrant
+langchain-text-splitters==1.1.2
+langchain-openai

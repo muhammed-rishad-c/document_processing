@@ -1,14 +1,15 @@
 import io
 import re
 import csv
-
+import tiktoken
 import os,uuid
+
 from collections import Counter
 import pymupdf as fitz
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-import tiktoken
 
 TOKENIZER_ENCODING="cl100k_base"
 tokenizer=tiktoken.get_encoding(TOKENIZER_ENCODING)
@@ -144,53 +145,23 @@ def chunk_text(text: str, max_chunk_size: int = 300, chunk_overlap: int = 50) ->
     if not text.strip():
         return []
 
-    
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    chunks = []
-    chunk_index = 0
-    
-    current_tokens = []
-    
-    for paragraph in paragraphs:
-        para_tokens = tokenizer.encode(paragraph)
-        
-        
-        if len(para_tokens) > max_chunk_size:
-            start = 0
-            step = max_chunk_size - chunk_overlap
-            while start < len(para_tokens):
-                chunk_toks = para_tokens[start:start + max_chunk_size]
-                chunks.append({
-                    "chunk_index": chunk_index,
-                    "chunk_text": tokenizer.decode(chunk_toks),
-                    "token_count": len(chunk_toks)
-                })
-                chunk_index += 1
-                start += step
-            continue
+    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        encoding_name=TOKENIZER_ENCODING,
+        chunk_size=max_chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
 
+    raw_chunks = splitter.split_text(text)
 
-        if len(current_tokens) + len(para_tokens) <= max_chunk_size:
-            current_tokens.extend(para_tokens)
-        else:
-            chunks.append({
-                "chunk_index": chunk_index,
-                "chunk_text": tokenizer.decode(current_tokens),
-                "token_count": len(current_tokens)
-            })
-            chunk_index += 1
-            
-            overlap_tokens = current_tokens[-chunk_overlap:] if chunk_overlap < len(current_tokens) else current_tokens
-            current_tokens = overlap_tokens + para_tokens
-
-    if current_tokens:
-        chunks.append({
-            "chunk_index": chunk_index,
-            "chunk_text": tokenizer.decode(current_tokens),
-            "token_count": len(current_tokens)
-        })
-
-    return chunks
+    return [
+        {
+            "chunk_index": idx,
+            "chunk_text": chunk,
+            "token_count": count_token(chunk),
+        }
+        for idx, chunk in enumerate(raw_chunks)
+    ]
     
     
     
