@@ -23,3 +23,8 @@ doc_processor/app/uploads/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local sentence-transformer model (downloaded via one-time script, not versioned)
+doc_processor/app/models/
+
+doc_processor/app/analytics_log.jsonl

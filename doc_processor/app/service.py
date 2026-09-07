@@ -103,13 +103,10 @@ def count_token(text:str)->int:
     return len(tokenizer.encode(text))
 
 def generate_chunk_token_sequence_csv(chunks: list[dict], output_path: str) -> dict:
-    
-    
-    import csv
 
+    import csv
     if not chunks:
         raise ValueError("Cannot generate token report for an empty chunk list.")
-
     rows = []
     for chunk in chunks:
         chunk_index = chunk["chunk_index"]
@@ -121,11 +118,22 @@ def generate_chunk_token_sequence_csv(chunks: list[dict], output_path: str) -> d
                 token_text = "<decode_error>"
             rows.append((chunk_index, position, token_id, token_text))
 
+    rows.sort(key=lambda r: r[2])
+
+    seen_token_ids = set()
+    unique_rows = []
+    for row in rows:
+        token_id = row[2]
+        if token_id not in seen_token_ids:
+            seen_token_ids.add(token_id)
+            unique_rows.append(row)
+    rows = unique_rows
+   
+
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["chunk_index", "position", "token_id", "token_text"])
         writer.writerows(rows)
-
     return {
         "total_chunks": len(chunks),
         "total_token_rows": len(rows),

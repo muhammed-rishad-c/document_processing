@@ -1,13 +1,13 @@
 [
   {
-    "chunk_size": 400,
+    "chunk_size": 500,
     "chunk_overlap": 50,
     "eval_top_k": 6,
     "questions_run": 25,
-    "avg_latency_ms": 7160.69,
+    "avg_latency_ms": 7823.77,
     "top1_accuracy_pct": 100.0,
     "top3_accuracy_pct": 100.0,
-    "avg_cosine_similarity_pct": 61.64,
+    "avg_cosine_similarity_pct": 54.53,
     "avg_context_tokens_est": 0
   }
 ]

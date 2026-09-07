@@ -111,7 +111,7 @@ def _run_chunk_token_sequence_report(chunks: list[dict], output_path: str, doc_i
     except Exception as e:
         print(f"[background] WARNING: failed to generate chunk token sequence CSV "
               f"for doc {doc_id}: {str(e)}")
-        
+         
         
 @app.get("/analytics")
 def get_analytics():

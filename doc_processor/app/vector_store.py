@@ -1,11 +1,13 @@
 import uuid
 import time
+import os
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue
 from sentence_transformers import SentenceTransformer
 from qdrant_client.http.models import PointStruct ,Filter, FieldCondition, MatchValue
 
-encoder = SentenceTransformer("all-MiniLM-L6-v2")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "all-MiniLM-L6-v2")
+encoder = SentenceTransformer(MODEL_PATH)
 qdrant = QdrantClient(host="localhost", port=6333)
 
 COLLECTION_NAME = "document_chunks"
