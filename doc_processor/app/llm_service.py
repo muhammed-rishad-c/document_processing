@@ -1,5 +1,6 @@
 import os
 import time
+import re
 
 from dotenv import load_dotenv
 
@@ -21,8 +22,6 @@ EXTRA_HEADERS = {
     "X-Title": "LiquidLab RAG App",
 }
 
-# LangChain's ChatOpenAI wraps the same underlying OpenAI SDK client,
-# pointed at OpenRouter via base_url exactly as the raw client was.
 llm = ChatOpenAI(
     model=MODEL_NAME,
     base_url="https://openrouter.ai/api/v1",
@@ -31,9 +30,6 @@ llm = ChatOpenAI(
     default_headers=EXTRA_HEADERS,
 )
 
-# LCEL chain: prompt -> llm. No output parser here on purpose —
-# a parser would strip the AIMessage's .usage_metadata, which we need
-# for input_tokens/output_tokens reporting (read by main.py + analytics.py).
 rag_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", "{system_prompt}"),
@@ -114,6 +110,12 @@ def build_safe_context(
     combined_context = "".join(selected_chunks)
     return combined_context, current_tokens
  
+LEAD_IN_PATTERN = re.compile(
+    r"^(based on|according to|as (?:stated|mentioned|shown|outlined) in|as per|per|from)\s+"
+    r"(the\s+)?(provided\s+|given\s+|available\s+)?"
+    r"(document(s)?|context|text|information|content)\b[^.:\-\u2013\u2014\n]*[.:\-\u2013\u2014]\s*",
+    re.IGNORECASE,
+)
 
 def generate_rag_answer_with_memory(
     user_query: str,
@@ -127,21 +129,28 @@ def generate_rag_answer_with_memory(
     context_str, context_tokens = build_safe_context(retrieved_chunks, user_query, reduced_history)
     t_ctx_end = time.perf_counter()
 
-    summary_keywords = ["summarize", "summary", "recap", "overview", "main points", "about"]
+    summary_keywords = ["summarize", "summary", "recap", "overview", "main points"]
     is_summary_query = any(kw in user_query.lower() for kw in summary_keywords)
 
     doc_context = context_str if context_str else "No specific document context found."
 
     if is_summary_query:
         system_prompt = (
-            "You are LiquidLab AI, a concise document assistant.\n\n"
+            "You are LiquidLab AI, a helpful company chatbot answering visitor questions.\n\n"
             "CRITICAL FORMATTING INSTRUCTIONS:\n"
-            "1. BE COMPACT: Keep summaries focused and brief. Use max 3-4 bullet points or 1 short paragraph (under 80 words).\n"
-            "2. Start your answer IMMEDIATELY with the core facts/summary. DO NOT use conversational greetings or meta-announcements.\n"
-            "3. STRICTLY FORBIDDEN PREVIEW PHRASES (NEVER USE THESE): "
-            "'Based on the provided document', 'According to the text', 'Based on the text', 'In the document provided', 'Based on the context'.\n"
-            "4. Example of BAD response: 'Based on the provided text, the factors affecting...'\n"
-            "5. Example of GOOD response: 'The factors affecting global warming are primarily human activities...'\n"
+            "1. Match the length to the question: a single fact gets 1-2 sentences. A question covering "
+            "3 or more distinct items (services, features, technologies, steps) gets a short bulleted list. "
+            "Cap any list at 6 items MAXIMUM — pick the 6 most important/representative ones, even if the "
+            "context has more. Never cram a multi-item answer into one dense sentence, and never pad a "
+            "simple fact with filler.\n"
+            "2. Keep each bullet to ONE short phrase (under ~12 words), bolded name first. No sub-explanations, "
+            "no extra clauses, no second sentence per bullet.\n"
+            "3. If you had to cut items to stay at 6, end with a brief one-line offer like 'Ask if you'd like "
+            "the full list.' Do not do this if you listed everything already.\n"
+            "4. Start your answer IMMEDIATELY with the core facts/summary. DO NOT use conversational greetings, "
+            "meta-announcements, or ANY lead-in phrase referencing 'the document', 'the text', 'the context', "
+            "or where the information came from — not even paraphrased. Just state the answer directly.\n"
+            "5. Do not add a closing summary sentence after a bulleted list — the list IS the answer, stop there.\n"
             "6. Do not include chunk tags, document IDs, or metadata inside the answer text.\n"
             "7. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
             "8. If there is no document context or chat history available, reply EXACTLY with: "
@@ -150,15 +159,21 @@ def generate_rag_answer_with_memory(
         )
     else:
         system_prompt = (
-            "You are LiquidLab AI, a concise document assistant.\n\n"
+            "You are LiquidLab AI, a helpful company chatbot answering visitor questions.\n\n"
             "CRITICAL FORMATTING INSTRUCTIONS:\n"
-            "1. BE EXTREMELY COMPACT AND DIRECT: Keep responses under 2-3 short sentences (max 50 words).\n"
-            "2. FOR FOLLOW-UP QUESTIONS: Answer only the specific new detail asked. NEVER repeat facts, background, or context already given in earlier conversation turns.\n"
-            "3. Start your answer IMMEDIATELY with the factual response. NEVER lead with introductory, greeting, or preamble text.\n"
-            "4. STRICTLY FORBIDDEN PREVIEW PHRASES (NEVER USE THESE): "
-            "'Based on the provided document', 'According to the text', 'Based on the text', 'In the provided document', 'Based on the context'.\n"
-            "5. Example of BAD response: 'Based on the text, the main factors are...'\n"
-            "6. Example of GOOD response: 'The main factors are...'\n"
+            "1. Match the length to the question: a single fact (e.g. contact info, a yes/no) gets 1-2 short "
+            "sentences. A question covering 3 or more distinct items (services, features, technologies, steps) "
+            "gets a short bulleted list. Cap any list at 6 items MAXIMUM — pick the 6 most important/representative "
+            "ones, even if the context has more. Never cram a multi-item answer into one dense sentence just to keep it short.\n"
+            "2. Keep each bullet to ONE short phrase (under ~12 words), bolded name first. No sub-explanations, "
+            "no extra clauses, no second sentence per bullet.\n"
+            "3. If you had to cut items to stay at 6, end with a brief one-line offer like 'Ask if you'd like "
+            "more detail.' Do not do this if you listed everything already.\n"
+            "4. FOR FOLLOW-UP QUESTIONS: Answer only the specific new detail asked. NEVER repeat facts, background, or context already given in earlier conversation turns.\n"
+            "5. Start your answer IMMEDIATELY with the factual response. NEVER lead with introductory, greeting, "
+            "or preamble text — and NEVER reference 'the document', 'the text', 'the context', or where the "
+            "information came from, in any phrasing, at the start or anywhere in the answer.\n"
+            "6. Do not add a closing summary sentence after a bulleted list — the list IS the answer, stop there.\n"
             "7. Do not cite chunk tags, doc IDs, or metadata inside the answer text.\n"
             "8. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
             "9. If the answer cannot be found in the provided context or chat history, reply EXACTLY with: "
@@ -183,6 +198,22 @@ def generate_rag_answer_with_memory(
         if not line.strip().startswith(("User Safety:", "Response Safety:"))
     ]
     cleaned_text = "\n".join(cleaned_lines).strip()
+
+    
+    match = LEAD_IN_PATTERN.match(cleaned_text)
+    if match:
+        remainder = cleaned_text[match.end():].lstrip()
+        if remainder:
+            cleaned_text = remainder[0].upper() + remainder[1:]
+
+    
+    lines = cleaned_text.splitlines()
+    bullet_idx = [i for i, ln in enumerate(lines) if ln.strip().startswith(("- ", "* ", "\u2022 "))]
+    if len(bullet_idx) > 6:
+        cutoff = bullet_idx[5]
+        cleaned_text = "\n".join(lines[: cutoff + 1]).strip()
+        cleaned_text += "\n\nAsk if you'd like the full list."
+
     if not cleaned_text:
         cleaned_text = "I cannot find the answer in the provided document context."
 

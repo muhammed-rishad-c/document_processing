@@ -379,7 +379,7 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
-    all_messages = (
+    all_messages = ( 
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == payload.session_id)
         .order_by(ChatMessage.created_at.asc())

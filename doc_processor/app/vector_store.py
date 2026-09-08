@@ -12,7 +12,7 @@ encoder = HuggingFaceEmbeddings(model_name=MODEL_PATH)
 qdrant = QdrantClient(host="localhost", port=6333)
 COLLECTION_NAME = "document_chunks"
 
-
+ 
 def init_qdrant():
     collections = [c.name for c in qdrant.get_collections().collections]
     if COLLECTION_NAME not in collections:

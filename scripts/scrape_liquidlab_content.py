@@ -7,7 +7,7 @@ needs refreshing, then feed the output .txt through the existing
 /documents/upload endpoint.
 
 Usage:
-    pip install requests beautifulsoup4 lxml
+    pip install "scrapling[fetchers]"
     python scrape_liquidlab_content.py
     python scrape_liquidlab_content.py --output my_output.txt
 
@@ -24,8 +24,8 @@ import os
 import time
 from dataclasses import dataclass
 
-import requests
-from bs4 import BeautifulSoup
+from scrapling.fetchers import Fetcher
+from scrapling.engines.toolbelt.custom import Response
 
 BASE_URL = "https://trail.liquidlab.in"
 
@@ -54,10 +54,12 @@ PAGES = [
 ]
 
 # Tags that are pure layout/boilerplate and never contain page-specific
-# content worth keeping -- stripped before any text is pulled out.
-STRUCTURAL_TAGS_TO_DROP = [
+# content worth keeping -- ignored at text-extraction time (Scrapling has
+# no in-place DOM mutation like BS4's decompose(), so we skip these tags'
+# text via `ignore_tags` on get_all_text() instead of stripping them first).
+STRUCTURAL_TAGS_TO_DROP = (
     "header", "footer", "nav", "script", "style", "noscript", "svg", "iframe",
-]
+)
 
 # Exact-match (case-insensitive) short lines that are nav labels, CTA button
 # text, or other boilerplate that survives structural stripping because it
@@ -79,6 +81,8 @@ REQUEST_HEADERS = {
     )
 }
 
+REQUEST_TIMEOUT = 20  # seconds
+
 
 @dataclass
 class ScrapedPage:
@@ -87,22 +91,19 @@ class ScrapedPage:
     lines: list
 
 
-def fetch_page(url: str) -> BeautifulSoup:
-    resp = requests.get(url, headers=REQUEST_HEADERS, timeout=20)
-    resp.raise_for_status()
-    return BeautifulSoup(resp.text, "lxml")
+def fetch_page(url: str) -> Response:
+    resp = Fetcher.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+    if resp.status >= 400:
+        raise RuntimeError(f"HTTP {resp.status} {resp.reason} for {url}")
+    return resp
 
 
-def extract_lines(soup: BeautifulSoup) -> list:
-    """Structural extraction: strip layout tags, pull remaining text as lines."""
-    main = soup.find("main") or soup.body
-    if main is None:
-        return []
-    for tag in main.find_all(STRUCTURAL_TAGS_TO_DROP):
-        tag.decompose()
-    text = main.get_text(separator="\n")
-    lines = [line.strip() for line in text.split("\n")]
-    lines = [line for line in lines if len(line) >= MIN_LINE_LENGTH]
+def extract_lines(response: Response) -> list:
+    """Structural extraction: pull text from <main> (falling back to <body>),
+    skipping layout tags entirely via `ignore_tags` rather than mutating the DOM."""
+    main = response.css("main").first or response.css("body").first or response
+    text = main.get_all_text(separator="\n", strip=True, ignore_tags=STRUCTURAL_TAGS_TO_DROP)
+    lines = [line for line in str(text).split("\n") if len(line) >= MIN_LINE_LENGTH]
     return lines
 
 
@@ -142,8 +143,8 @@ def filter_noise(lines: list) -> list:
 
 def scrape_page(title: str, path: str) -> ScrapedPage:
     url = BASE_URL + path
-    soup = fetch_page(url)
-    lines = extract_lines(soup)
+    response = fetch_page(url)
+    lines = extract_lines(response)
     lines = dedupe_consecutive_blocks(lines)
     lines = filter_noise(lines)
     return ScrapedPage(title=title, url=url, lines=lines)
@@ -173,7 +174,7 @@ def main():
             if not page.lines:
                 print(f"  WARNING: no content extracted for {path} -- check manually")
             scraped_pages.append(page)
-        except requests.RequestException as e:
+        except Exception as e:
             print(f"  FAILED: {path} -- {e}")
         time.sleep(args.delay)
 
