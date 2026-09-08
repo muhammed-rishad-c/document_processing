@@ -58,6 +58,8 @@ from .llm_service import(
     generate_rag_answer_with_memory,
 )
 
+from .widget import router as widget_router
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -72,7 +74,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"],
-)
+)  
+ 
+app.include_router(widget_router)
 
 GREETING_TEXT = (
     "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, "
@@ -170,6 +174,7 @@ async def upload_document(
         db.add(doc)
         db.commit()
         db.refresh(doc)
+        print(f"[upload] document_id: {doc.id}")
         
     except Exception as e:
         db.rollback()

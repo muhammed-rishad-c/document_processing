@@ -128,3 +128,18 @@ class MemoryRAGResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     comment: Optional[str] = None
+    
+    
+class WidgetSessionCreate(BaseModel):
+    title: Optional[str] = None
+
+
+class WidgetChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: UUID
+    query: str = Field(min_length=1, max_length=1000)
+
+
+class WidgetChatResponse(BaseModel):
+    session_id: UUID
+    answer: str

@@ -1,7 +1,7 @@
 {
   "dataset_info": {
-    "source_document": "the-metamorphosis-franz-kafka-10258.pdf",
-    "note": "expected_sources uses the FILENAME, not a document UUID. UUIDs are reassigned by /documents/upload every time a file is (re)uploaded, so a hard-coded UUID goes stale the moment the file is re-uploaded (e.g. during the chunk-size experiment). Each eval script resolves the current document_id for this filename via GET /documents at run time instead.",
+    "source_document": "Pasted text.txt",
+    "note": "Company-data evaluation dataset for comparing Top-K retrieval. expected_sources uses the exact indexed filename, not a document UUID.",
     "categories": {
       "easy": "Q1-Q8",
       "multi_chunk": "Q9-Q14",
@@ -14,176 +14,220 @@
     {
       "id": "Q1",
       "category": "easy",
-      "question": "What happens to Gregor Samsa at the very beginning of the story?",
-      "expected_answer": "He wakes up one morning to find he has been transformed into a monstrous insect/vermin.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What is LiquidLab's main focus according to the company overview?",
+      "expected_answer": "LiquidLab focuses on designing and building customized solutions, including software, IoT, cloud, hardware, mobile and web applications, and industry-ready systems.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q2",
       "category": "easy",
-      "question": "What is Gregor's job?",
-      "expected_answer": "He is a traveling salesman selling cloth goods.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "Which industries are listed under LiquidLab's custom software delivery?",
+      "expected_answer": "The listed industries are healthcare, logistics, fintech, retail, manufacturing, and legal and professional services.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q3",
       "category": "easy",
-      "question": "Who is the first person to knock on Gregor's door on the morning of his transformation?",
-      "expected_answer": "His mother.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "Which backend technologies are listed in LiquidLab's main technology stack?",
+      "expected_answer": "The main backend technologies listed include Node.js, Python, and FastAPI, along with REST APIs and databases such as PostgreSQL, MongoDB, and Redis.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q4",
       "category": "easy",
-      "question": "What is the name of Gregor's sister?",
-      "expected_answer": "Grete.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What is LiquidLab's headquarters location?",
+      "expected_answer": "LiquidLab's headquarters is in Bengaluru, Karnataka 560043.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q5",
       "category": "easy",
-      "question": "What food does Gregor's sister first leave for him, and how does he react to it?",
-      "expected_answer": "She leaves sweetened milk with pieces of white bread in it, but Gregor is disappointed and turns away from it in aversion.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What email address is provided for general inquiries?",
+      "expected_answer": "The general inquiry email address is info@liquidlab.in.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q6",
       "category": "easy",
-      "question": "What object does Gregor's father throw at him that causes a serious, lasting wound?",
-      "expected_answer": "An apple, thrown from the fruit bowl, which lodges in Gregor's back.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What are LiquidLab's stated working hours?",
+      "expected_answer": "The stated working hours are 10:00 AM to 7:00 PM IST, Monday through Saturday.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q7",
       "category": "easy",
-      "question": "What instrument does Grete play?",
-      "expected_answer": "The violin.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "Which frameworks are listed for LiquidLab's AI and machine learning work?",
+      "expected_answer": "The AI/ML stack lists TensorFlow, PyTorch, OpenCV, Hugging Face, and scikit-learn, with Python as the primary language.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q8",
       "category": "easy",
-      "question": "How many lodgers does the Samsa family take in, and what do they have in common physically?",
-      "expected_answer": "Three lodgers, all of whom have full beards.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What are the three main layers in the telecom QoS system architecture?",
+      "expected_answer": "The three layers are the Android Probe Layer, Cloud Processing Layer, and Visualization Layer.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q9",
       "category": "multi_chunk",
-      "question": "How does the family's financial situation get explained to Gregor, and what savings do they actually have?",
-      "expected_answer": "The father explains there is a small leftover fortune from his failed business, plus unspent money Gregor had brought home, which together only add up to enough to support the family for one or two years and should be kept as an emergency reserve \u2014 not enough to live on the interest alone.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "How does LiquidLab's custom software development lifecycle progress from an initial idea to ongoing support?",
+      "expected_answer": "The lifecycle progresses through Discover, Plan, Design, Engineer, Test, Deploy, and then stabilization, enhancements, and knowledge transfer.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q10",
       "category": "multi_chunk",
-      "question": "How does Gregor's relationship with food change over the course of the story?",
-      "expected_answer": "Early on he still has a strong appetite and is drawn to spoiled/pungent food over fresh food; over time his interest in eating steadily declines until, in Part III, he eats almost nothing at all and effectively starves.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "How does LiquidLab's AI/ML delivery process move a use case from discovery into production and later improvement?",
+      "expected_answer": "The process is Discover, Prepare Data, Model, Validate, Deploy, and Improve. It begins by identifying use cases and data constraints, then prepares and trains models, validates them, deploys them with monitoring and fallbacks, and retrains or tunes them as new data arrives.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q11",
       "category": "multi_chunk",
-      "question": "Describe how responsibility for cleaning Gregor's room shifts between different characters over the course of the story.",
-      "expected_answer": "Grete initially handles his food and room; the mother once takes over cleaning it, which upsets Grete; eventually neither the mother nor Grete regularly cleans it, and the job falls to the elderly cleaning woman who is unafraid of Gregor.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What components make up LiquidLab's trolley inventory solution and how do they work together?",
+      "expected_answer": "The solution uses trolley-mounted passive UHF RFID tags, fixed RFID gates/readers, portable UHF handheld systems, a cloud inventory dashboard, and integration and alerting. Tags provide unique identities, fixed readers capture movement, the cloud platform updates inventory and zone maps, and alerts and handheld apps help operations teams redistribute the fleet.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q12",
       "category": "multi_chunk",
-      "question": "How and why does the furniture in Gregor's room change during the story?",
-      "expected_answer": "Grete and the mother start removing the chest of drawers and writing desk to give Gregor more room to crawl on the walls and ceiling; the mother argues for leaving it so Gregor's humanity is preserved, but Grete insists on emptying it, and eventually the room is also used to store household junk.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "How does the ultrasonic parking solution guide a driver from entering the facility to parking in an available bay?",
+      "expected_answer": "A zone display shows available spaces, the driver selects a zone, green ceiling pilot lights guide the driver down the aisle, and the driver parks at an open bay marked by a green light.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q13",
       "category": "multi_chunk",
-      "question": "What sequence of events leads directly to Gregor's death?",
-      "expected_answer": "After the lodgers discover him and angrily give notice, Grete declares the family must get rid of 'it'; Gregor, already weakened by the embedded apple wound and long starvation, retreats to his room and dies quietly before dawn.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What does LiquidLab's ticketless ANPR parking system provide from vehicle recognition through access control and payment integration?",
+      "expected_answer": "The system uses AI-powered number-plate recognition to identify vehicles, authorize or restrict access through whitelist/blacklist management, and control entry gates. It provides real-time analytics and supports payment integrations including FASTag, UPI, wallets, QR codes, and ERP billing.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q14",
       "category": "multi_chunk",
-      "question": "What jobs do the family members take on after Gregor can no longer support them?",
-      "expected_answer": "The father becomes a bank messenger/servant, the mother sews fine undergarments for a fashion shop, and Grete gets a job as a salesgirl (while also studying stenography and French in the evenings).",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "How does LiquidLab's employee attendance solution connect employee verification, workforce monitoring, and payroll?",
+      "expected_answer": "Employees can check in through face recognition, fingerprints, RFID/NFC, or mobile GPS. The system provides real-time workforce status and automatically sends shift hours, overtime, and approved leave information to payroll, while also supporting anti-spoofing and geofenced verification.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q15",
       "category": "cross_section",
-      "question": "Compare the manager's reaction to Gregor in Part I with the lodgers' reaction to discovering him in Part III.",
-      "expected_answer": "The manager flees in horror the instant he sees Gregor, rushing down the stairs; the lodgers, on discovering him, react with cold indignation, declaring the household conditions disgraceful and immediately canceling their room without paying.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "Compare LiquidLab's camera-based parking solution with its ultrasonic parking solution in terms of the technology used to detect and communicate parking availability.",
+      "expected_answer": "The camera-based solution uses overhead cameras to continuously observe bays and update availability, while the ultrasonic solution uses an ultrasonic sensor for each bay. Both provide live availability, but the ultrasonic system additionally uses ceiling pilot lights and a zone display board for physical guidance.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q16",
       "category": "cross_section",
-      "question": "How does the father's physical condition change from the beginning of the story to Part II?",
-      "expected_answer": "In Part I he is depicted as old, worn down, and largely inactive after his business failed; by Part II, after taking a job as a bank servant, he stands up straight, wears a smart uniform, and moves with new alertness and physical force.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "How do LiquidLab's cloud/SaaS solutions and ERP/CRM/HRMS solutions differ in their primary business purpose?",
+      "expected_answer": "Cloud/SaaS solutions focus on multi-tenant, cloud-native platforms, subscriptions, tenant isolation, scaling, and cloud modernization. ERP/CRM/HRMS solutions focus on connecting finance, customers, employees, workflows, permissions, reporting, and enterprise operations in unified business systems.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q17",
       "category": "cross_section",
-      "question": "What plan did Gregor have for his sister's future, and how does the family's outlook on her contrast at the very end of the story?",
-      "expected_answer": "Gregor had secretly planned to send Grete to the music conservatory to study violin. At the end, after his death, the parents instead notice she has blossomed into a young woman and begin thinking about finding her a husband \u2014 the conservatory dream is never mentioned again.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "Compare the technology and purpose of LiquidLab's AI/ML solutions with its telecom QoS solution.",
+      "expected_answer": "The AI/ML offering uses technologies such as Python, TensorFlow, PyTorch, OpenCV, Hugging Face, and scikit-learn for predictive analytics, NLP/LLMs, computer vision, chatbots, fraud detection, and other intelligent systems. The telecom QoS solution uses Android probes, HTTPS/MQTT, cloud analytics, RCA, and dashboards to monitor network performance metrics such as latency, throughput, signal quality, and call quality.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q18",
       "category": "cross_section",
-      "question": "How does the family's willingness to discuss Gregor's condition openly in front of him change between Part I and Part III?",
-      "expected_answer": "In Part I, the family is cautious and worried, trying to help without confronting the truth directly; by Part III, Grete openly refuses to say Gregor's name and argues in front of the closed door that 'it' must be gotten rid of, treating him as no longer part of the family.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "How do LiquidLab's DevOps delivery approach and cloud/SaaS delivery approach both address scalability and reliability?",
+      "expected_answer": "DevOps emphasizes automated CI/CD, resilient infrastructure, observability, containers, infrastructure as code, health checks, rollbacks, and scalable cloud foundations. Cloud/SaaS emphasizes cloud-native architecture, multi-tenant isolation, secure authentication, autoscaling, reliable platforms, and operational visibility. Both aim to support growth without sacrificing reliability or control.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q19",
       "category": "ambiguous_pair",
-      "question": "What did the office manager say immediately after hearing Gregor's altered voice through the door (before seeing him)?",
-      "expected_answer": "He remarked that it sounded like 'an animal's voice.'",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What is the response time stated on LiquidLab's contact page?",
+      "expected_answer": "The contact page says the team responds within 24 hours.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q20",
       "category": "ambiguous_pair",
-      "question": "What did the office manager do immediately after actually seeing Gregor for the first time?",
-      "expected_answer": "He cried out and fled toward the staircase, eventually leaping down several stairs to get away.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What is the recognition speed of LiquidLab's ticketless ANPR parking system?",
+      "expected_answer": "The ANPR system states a recognition or detection time of under one second per vehicle.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q21",
       "category": "ambiguous_pair",
-      "question": "What did the cleaning woman say when she found Gregor's body?",
-      "expected_answer": "She called out that he had 'kicked the bucket' and was 'totally snuffed.'",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What percentage of inventory accuracy is claimed for LiquidLab's airport trolley tracking solution?",
+      "expected_answer": "The trolley inventory solution claims 99.9% inventory accuracy.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q22",
       "category": "ambiguous_pair",
-      "question": "What did Mr. Samsa say after being told Gregor was dead?",
-      "expected_answer": "He said, 'now we can give thanks to God,' and crossed himself.",
-      "expected_sources": ["the-metamorphosis-franz-kafka-10258.pdf"]
+      "question": "What is the average finding time shown for the ultrasonic parking solution before and after guidance?",
+      "expected_answer": "The displayed average finding time is reduced from 8.2 minutes to under 1.5 minutes.",
+      "expected_sources": [
+        "Pasted text.txt"
+      ]
     },
     {
       "id": "Q23",
       "category": "unanswerable",
-      "question": "What specific species of insect does Gregor Samsa turn into?",
-      "expected_answer": "This information is not present in the document \u2014 the text deliberately never names a specific species, only describing him as a 'monstrous verminous bug.'",
+      "question": "What is the exact number of full-time software engineers currently employed by LiquidLab?",
+      "expected_answer": "This information is not present in the document.",
       "expected_sources": []
     },
     {
       "id": "Q24",
       "category": "unanswerable",
-      "question": "What was Gregor's exact age at the time of his transformation?",
+      "question": "What was LiquidLab's total revenue in the most recent financial year?",
       "expected_answer": "This information is not present in the document.",
       "expected_sources": []
     },
     {
       "id": "Q25",
       "category": "unanswerable",
-      "question": "What exact wording did Mr. Samsa, Mrs. Samsa, and Grete each use in their letters of apology to their employers?",
-      "expected_answer": "This information is not present in the document \u2014 the letters are mentioned as being written, but their content is never given.",
+      "question": "Who is the current CEO of LiquidLab?",
+      "expected_answer": "This information is not present in the document.",
       "expected_sources": []
     }
   ]
