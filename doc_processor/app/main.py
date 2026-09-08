@@ -8,6 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse,Response
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from . import analytics
 from . import feedback
@@ -58,6 +62,10 @@ from .llm_service import(
     generate_rag_answer_with_memory,
 )
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from .rate_limit import limiter
+
 from .widget import router as widget_router
 
 Base.metadata.create_all(bind=engine)
@@ -68,13 +76,27 @@ app = FastAPI(
     version="2.0.0"
 )
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+load_dotenv()
+
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"],
 )  
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
  
 app.include_router(widget_router)
 
@@ -89,6 +111,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @app.on_event("startup")
 def startup_event():
     init_qdrant()
+    
     
 @app.middleware("http")
 async def analytics_middleware(request: Request, call_next):

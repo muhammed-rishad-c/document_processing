@@ -19,3 +19,4 @@ langchain-openai
 curl_cffi
 playwright
 patchright
+slowapi

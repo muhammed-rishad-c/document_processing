@@ -1,6 +1,7 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from fastapi import Request
 
 from .database import get_db
 from .models import ChatSession, ChatMessage
@@ -12,6 +13,7 @@ from .schemas import (
 )
 from .llm_service import generate_rag_answer_with_memory
 from .vector_store import search_similar_chunks
+from .rate_limit import limiter
 
 LIQUIDLAB_DOCUMENT_ID = os.getenv("LIQUIDLAB_DOCUMENT_ID")
 if not LIQUIDLAB_DOCUMENT_ID:
@@ -29,7 +31,8 @@ router = APIRouter(prefix="/widget", tags=["public-widget"])
 
 
 @router.post("/session", response_model=ChatSessionResponse, status_code=201)
-def create_widget_session(payload: WidgetSessionCreate, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def create_widget_session(request: Request, payload: WidgetSessionCreate, db: Session = Depends(get_db)):
     session = ChatSession(
         title=payload.title,
         document_id=LIQUIDLAB_DOCUMENT_ID,
@@ -49,7 +52,8 @@ def create_widget_session(payload: WidgetSessionCreate, db: Session = Depends(ge
 
 
 @router.post("/chat", response_model=WidgetChatResponse)
-def widget_chat(payload: WidgetChatRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def widget_chat(request: Request, payload: WidgetChatRequest, db: Session = Depends(get_db)):
     session = db.query(ChatSession).filter(ChatSession.id == payload.session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
@@ -68,11 +72,17 @@ def widget_chat(payload: WidgetChatRequest, db: Session = Depends(get_db)):
         document_id=LIQUIDLAB_DOCUMENT_ID,
     )
 
-    llm_result = generate_rag_answer_with_memory(
-        user_query=payload.query,
-        retrieved_chunks=retrieved_chunks,
-        chat_history=history_payload,
-    )
+    try:
+        llm_result = generate_rag_answer_with_memory(
+            user_query=payload.query,
+            retrieved_chunks=retrieved_chunks,
+            chat_history=history_payload,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="The assistant is temporarily unavailable. Please try again shortly.",
+        )
 
     user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
     assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=llm_result["text"])
