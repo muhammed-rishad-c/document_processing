@@ -108,6 +108,69 @@
       margin: 0;
     }
 
+    .feedback-card {
+      align-self: center;
+      background: var(--surface-2);
+      border: 1px solid var(--hairline);
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+      max-width: 90%;
+      text-align: center;
+    }
+
+    .feedback-card p {
+      margin: 0 0 0.6rem;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .feedback-stars {
+      display: flex;
+      justify-content: center;
+      gap: 0.35rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .feedback-stars button {
+      background: none;
+      border: none;
+      padding: 0.15rem;
+      font-size: 1.3rem;
+      line-height: 1;
+      color: var(--text-faint);
+      cursor: pointer;
+    }
+
+    .feedback-stars button.active,
+    .feedback-stars button:hover {
+      color: var(--amber);
+    }
+
+    .feedback-card textarea {
+      width: 100%;
+      min-height: 50px;
+      background: var(--ink-2);
+      border: 1px solid var(--hairline);
+      color: var(--text);
+      border-radius: 2px;
+      padding: 0.5rem;
+      font-family: var(--sans);
+      font-size: 0.82rem;
+      resize: vertical;
+      margin-bottom: 0.6rem;
+    }
+
+    .feedback-actions {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .feedback-actions button {
+      font-size: 0.78rem;
+      padding: 0.45rem 0.8rem;
+    }
+
     /* ---------- section scaffolding ---------- */
     .section {
       margin-bottom: 2.75rem;
@@ -745,17 +808,34 @@
   <script>
     const API_BASE = "http://localhost:9000";
     let activeSessionId = null;
+    let sessionHasActivity = false; // true once the user has sent >=1 message this session
+    let feedbackGiven = false;      // true once feedback was submitted or skipped for this session
+    let idleTimer = null;
+    const IDLE_FEEDBACK_MS = 2 * 60 * 1000; // 2 minutes of inactivity after a reply
 
     // ---------- Chat widget open/close ----------
     function toggleChatPanel(forceOpen) {
       const panel = document.getElementById("chatPanel");
       const fab = document.getElementById("chatFab");
       const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !panel.classList.contains("is-open");
+
+      // Closing an active, rated-eligible conversation -> ask for feedback first
+      if (!shouldOpen && activeSessionId && sessionHasActivity && !feedbackGiven) {
+        promptForFeedback(() => {
+          panel.classList.remove("is-open");
+          fab.classList.remove("is-open");
+        });
+        return;
+      }
+
       panel.classList.toggle("is-open", shouldOpen);
       fab.classList.toggle("is-open", shouldOpen);
       if (shouldOpen) {
         dismissNudge();
         document.getElementById("ragQuery").focus();
+        if (!activeSessionId) {
+          createNewSession();
+        }
       }
     }
 
@@ -797,6 +877,15 @@
 
     // 1. Create a New Session
     async function createNewSession() {
+      // If the current session had activity and hasn't been rated yet, ask first
+      if (activeSessionId && sessionHasActivity && !feedbackGiven) {
+        promptForFeedback(() => actuallyCreateNewSession());
+        return;
+      }
+      await actuallyCreateNewSession();
+    }
+
+    async function actuallyCreateNewSession() {
       try {
         const response = await fetch(`${API_BASE}/chats`, {
           method: "POST",
@@ -807,8 +896,11 @@
         if (response.ok) {
           const data = await response.json();
           activeSessionId = data.id;
+          sessionHasActivity = false;
+          feedbackGiven = false;
+          if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
           document.getElementById("currentSessionDisplay").innerText = "New conversation started";
-          document.getElementById("chatThread").innerHTML = `<div class="chat-empty">Start a session and enter a prompt to begin conversing.</div>`;
+          await loadSessionMessages(data.id);
         } else {
           alert("Failed to create chat session.");
         }
@@ -903,9 +995,9 @@
       bubble.id = "typingIndicator";
       bubble.className = "thinking-bubble";
       bubble.innerHTML = `
-            <div class="thinking-dots"><span></span><span></span><span></span></div>
-            <div class="thinking-label" id="thinkingLabel">${thinkingPhrases[0]}</div>
-        `;
+        <div class="thinking-dots"><span></span><span></span><span></span></div>
+        <div class="thinking-label" id="thinkingLabel">${thinkingPhrases[0]}</div>
+    `;
       threadDiv.appendChild(bubble);
       threadDiv.scrollTop = threadDiv.scrollHeight;
 
@@ -941,6 +1033,7 @@
       }
 
       appendMessageToThread("user", query);
+      sessionHasActivity = true;
       queryInput.value = "";
       showTypingIndicator();
 
@@ -969,6 +1062,97 @@
         hideTypingIndicator();
         appendMessageToThread("liquidlab assistant", `Request failed: ${err.message}`);
       }
+
+      resetIdleTimer();
+    }
+
+    // ---------- Idle-based feedback prompt ----------
+    // Fires if the user goes quiet for a while after getting a reply, without
+    // closing the panel or starting a new session.
+    function resetIdleTimer() {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+      if (!activeSessionId || !sessionHasActivity || feedbackGiven) return;
+
+      idleTimer = setTimeout(() => {
+        // Don't interrupt if the user is mid-typing-indicator or panel is closed
+        const panel = document.getElementById("chatPanel");
+        if (panel && panel.classList.contains("is-open") && !feedbackGiven) {
+          promptForFeedback(() => { });
+        }
+      }, IDLE_FEEDBACK_MS);
+    }
+
+    // ---------- Feedback card ----------
+    function promptForFeedback(onDone) {
+      if (feedbackGiven || !activeSessionId) {
+        onDone && onDone();
+        return;
+      }
+
+      const threadDiv = document.getElementById("chatThread");
+      let selectedRating = 0;
+
+      const card = document.createElement("div");
+      card.className = "feedback-card";
+      card.innerHTML = `
+    <p>How did this conversation go?</p>
+    <div class="feedback-stars">
+      ${[1, 2, 3, 4, 5].map(n => `<button type="button" data-star="${n}" aria-label="${n} star">★</button>`).join("")}
+    </div>
+    <textarea placeholder="Anything else? (optional)"></textarea>
+    <div class="feedback-actions">
+      <button type="button" class="ghost" id="fbSkip">Skip</button>
+      <button type="button" id="fbSubmit" disabled>Submit</button>
+    </div>
+  `;
+      threadDiv.appendChild(card);
+      threadDiv.scrollTop = threadDiv.scrollHeight;
+
+      const starButtons = card.querySelectorAll(".feedback-stars button");
+      const submitBtn = card.querySelector("#fbSubmit");
+      const skipBtn = card.querySelector("#fbSkip");
+      const commentBox = card.querySelector("textarea");
+
+      starButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          selectedRating = parseInt(btn.dataset.star, 10);
+          starButtons.forEach(b => {
+            b.classList.toggle("active", parseInt(b.dataset.star, 10) <= selectedRating);
+          });
+          submitBtn.disabled = false;
+        });
+      });
+
+      const finish = () => {
+        feedbackGiven = true;
+        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+        card.remove();
+        onDone && onDone();
+      };
+
+      skipBtn.addEventListener("click", finish);
+
+      submitBtn.addEventListener("click", async () => {
+        submitBtn.disabled = true;
+        skipBtn.disabled = true;
+        submitBtn.innerText = "Sending…";
+        try {
+          await fetch(`${API_BASE}/chats/${activeSessionId}/feedback`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              rating: selectedRating,
+              comment: commentBox.value.trim() || null
+            })
+          });
+        } catch (err) {
+          console.error("Feedback submit failed", err);
+        }
+        finish();
+      });
     }
 
     // Handle Semantic Search
@@ -980,10 +1164,10 @@
 
       resultsDiv.style.display = "block";
       resultsDiv.innerHTML = `
-            <div class="thinking-bubble" style="margin-top:1rem;">
-                <div class="thinking-dots"><span></span><span></span><span></span></div>
-                <div class="thinking-label">Searching the vector store…</div>
-            </div>`;
+        <div class="thinking-bubble" style="margin-top:1rem;">
+            <div class="thinking-dots"><span></span><span></span><span></span></div>
+            <div class="thinking-label">Searching the vector store…</div>
+        </div>`;
 
       try {
         const response = await fetch(`${API_BASE}/documents/search`, {
@@ -998,10 +1182,10 @@
           resultsDiv.innerHTML = `<h3 style="font-family:var(--serif); font-weight:600; font-size:1.05rem; margin:1rem 0 0.75rem;">Results for "${data.query}"</h3>`;
           data.results.forEach(res => {
             resultsDiv.innerHTML += `
-                        <div class="chunk-card">
-                            <div class="chunk-text">"${res.chunk_text}"</div>
-                        </div>
-                    `;
+                    <div class="chunk-card">
+                        <div class="chunk-text">"${res.chunk_text}"</div>
+                    </div>
+                `;
           });
         } else if (data.results && data.results.length === 0) {
           resultsDiv.innerHTML = `<div class="empty-state">No matching text chunks found.</div>`;
@@ -1026,11 +1210,11 @@
         }
 
         listDiv.innerHTML = docs.map(doc => `
-                    <div class="ledger-row">
-                        <span class="doc-name">${doc.filename}</span>
-                        <button class="danger" onclick="deleteDocument('${doc.id}')">Delete</button>
-                    </div>
-                `).join("");
+                <div class="ledger-row">
+                    <span class="doc-name">${doc.filename}</span>
+                    <button class="danger" onclick="deleteDocument('${doc.id}')">Delete</button>
+                </div>
+            `).join("");
       } catch (err) {
         listDiv.innerHTML = `<div class="empty-state" style="color:var(--rose);">Failed to load documents.</div>`;
       }

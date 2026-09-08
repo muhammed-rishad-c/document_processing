@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse,Response
 from sqlalchemy.orm import Session
 
 from . import analytics
+from . import feedback
 from .database import engine, Base, get_db
 from .models import (
     Document,
@@ -33,7 +34,8 @@ from .schemas import (
     ChatSessionResponse, 
     ChatMessageResponse, 
     MemoryRAGRequest, 
-    MemoryRAGResponse
+    MemoryRAGResponse,
+    FeedbackRequest
 )
 from .service import (
     extract_text_from_file,
@@ -41,7 +43,7 @@ from .service import (
     chunk_text,
     generate_chunk_token_sequence_csv
 
-)
+)   
 from .vector_store import (
     init_qdrant,
     get_embedding,
@@ -70,6 +72,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"],
+)
+
+GREETING_TEXT = (
+    "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, "
+    "solutions, or company — happy to help."
 )
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
@@ -356,6 +363,15 @@ def create_chat_session(payload: ChatSessionCreate, db: Session = Depends(get_db
     db.add(session)
     db.commit()
     db.refresh(session)
+
+    greeting_msg = ChatMessage(
+        session_id=session.id,
+        role="assistant",
+        content=GREETING_TEXT
+    )
+    db.add(greeting_msg)
+    db.commit()
+
     return session
 
 
@@ -372,6 +388,18 @@ def get_chat_messages(session_id: UUID, db: Session = Depends(get_db)):
         .all()
     )
     return messages
+
+@app.post("/chats/{session_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
+def submit_feedback(session_id: UUID, payload: FeedbackRequest, db: Session = Depends(get_db)):
+    session_exists = db.query(ChatSession.id).filter(ChatSession.id == session_id).first()
+    if not session_exists:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    feedback.log_feedback(
+        session_id=str(session_id),
+        rating=payload.rating,
+        comment=payload.comment
+    )
 
 @app.post("/documents/chat-memory", response_model=MemoryRAGResponse)
 def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),request:Request=None):

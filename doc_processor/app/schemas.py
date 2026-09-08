@@ -1,6 +1,7 @@
+
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel,ConfigDict
+from pydantic import BaseModel,ConfigDict,Field
 from typing import List,Dict,Any,Optional
 
 class DocumentStats(BaseModel):
@@ -123,3 +124,7 @@ class MemoryRAGResponse(BaseModel):
     query: str
     answer: str
     sources: List[ChunkSource]
+    
+class FeedbackRequest(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = None
