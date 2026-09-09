@@ -96,15 +96,16 @@ app.add_middleware(
     allow_headers=["*"],
 )  
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
- 
+
 app.include_router(widget_router)
+WIDGET_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static", "widget")
+app.mount("/widget-ui", StaticFiles(directory=WIDGET_STATIC_DIR, html=True), name="widget-ui")
 
 GREETING_TEXT = (
     "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, "
     "solutions, or company — happy to help."
-)
-
+)   
+ 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 

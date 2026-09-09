@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LiquidLab Chat</title>
+  <link rel="stylesheet" href="chat.css">
+</head>
+<body>
+  <div id="chat-container">
+    <div id="chat-header">
+      <span>LiquidLab Assistant</span>
+      <button id="close-btn">✕</button>
+    </div>
+
+    <div id="messages"></div>
+
+    <div id="input-row">
+      <input type="text" id="query-input" placeholder="Ask about LiquidLab..." />
+      <button id="send-btn">Send</button>
+    </div>
+
+    <div id="feedback-overlay" class="hidden">
+      <div id="feedback-box">
+        <p>How was this conversation?</p>
+        <div id="star-row">
+          <span class="star" data-value="1">★</span>
+          <span class="star" data-value="2">★</span>
+          <span class="star" data-value="3">★</span>
+          <span class="star" data-value="4">★</span>
+          <span class="star" data-value="5">★</span>
+        </div>
+        <textarea id="feedback-comment" placeholder="Anything you'd like to add? (optional)"></textarea>
+        <div id="feedback-actions">
+          <button id="skip-btn">Skip</button>
+          <button id="submit-feedback-btn">Submit</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="ended-message" class="hidden">
+      <p>Thanks for chatting! 👋</p>
+    </div>
+  </div>
+
+  <script src="chat.js"></script>
+</body>
+</html>
