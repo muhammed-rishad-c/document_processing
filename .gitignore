@@ -28,3 +28,4 @@ Thumbs.db
 doc_processor/app/models/
 
 doc_processor/app/analytics_log.jsonl
+doc_processor/app/feedback_log.jsonl

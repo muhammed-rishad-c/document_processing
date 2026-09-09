@@ -36,8 +36,7 @@ class ChatSession(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String, nullable=True, default="New Conversation")
     document_id = Column(UUID(as_uuid=True), nullable=True) 
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
     
 class ChatMessage(Base):

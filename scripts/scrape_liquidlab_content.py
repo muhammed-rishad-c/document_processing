@@ -1,23 +1,4 @@
-"""
-scrape_liquidlab_content.py
 
-Standalone content scraper for the LiquidLab RAG chatbot (Phase 1).
-NOT part of the FastAPI app — run this manually whenever the site content
-needs refreshing, then feed the output .txt through the existing
-/documents/upload endpoint.
-
-Usage:
-    pip install "scrapling[fetchers]"
-    python scrape_liquidlab_content.py
-    python scrape_liquidlab_content.py --output my_output.txt
-
-Refresh workflow (when the site changes):
-    1. Re-run this script -> new liquidlab_content.txt
-    2. Delete the old LiquidLab document via the existing delete_document
-       endpoint (cleans up Postgres + Qdrant)
-    3. Upload the new .txt via the existing /documents/upload endpoint
-    4. Re-run validation questions against the chatbot
-"""
 
 import argparse
 import os
@@ -29,9 +10,7 @@ from scrapling.engines.toolbelt.custom import Response
 
 BASE_URL = "https://trail.liquidlab.in"
 
-# Fixed, hardcoded page list -- Phase 1 scope. Careers and Blog are
-# intentionally excluded (see plan.md). Do not add a crawler/sitemap here;
-# the whole point is a known, deliberate set of pages.
+
 PAGES = [
     ("Company Overview", "/"),
     ("About Us", "/about-us"),
@@ -53,17 +32,12 @@ PAGES = [
     ("Contact", "/contact"),
 ]
 
-# Tags that are pure layout/boilerplate and never contain page-specific
-# content worth keeping -- ignored at text-extraction time (Scrapling has
-# no in-place DOM mutation like BS4's decompose(), so we skip these tags'
-# text via `ignore_tags` on get_all_text() instead of stripping them first).
+
 STRUCTURAL_TAGS_TO_DROP = (
     "header", "footer", "nav", "script", "style", "noscript", "svg", "iframe",
 )
 
-# Exact-match (case-insensitive) short lines that are nav labels, CTA button
-# text, or other boilerplate that survives structural stripping because it
-# isn't always inside <header>/<footer>/<nav> tags in the rendered markup.
+
 NOISE_PHRASES = {
     "home", "about us", "services", "solutions", "careers", "blog", "contact",
     "get in touch", "explore", "learn more", "read full story",

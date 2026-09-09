@@ -26,9 +26,6 @@ from .schemas import (
     DocumentResponse,
     DocumentDetailResponse,
     DocumentUploadResponse,
-    SearchResponse,
-    SimilarityRequest,
-    SimilarityResponse,
     SemanticSearchResponse,
     SemanticSearchRequest,
     RAGRequest,
@@ -50,13 +47,12 @@ from .service import (
 )   
 from .vector_store import (
     init_qdrant,
-    get_embedding,
     get_embeddings_batch,
     delete_vector,
     store_chunk_vector,
     search_similar_chunks
     
-)
+) 
 
 from .llm_service import(
     generate_rag_answer_with_memory,
@@ -104,7 +100,7 @@ app.mount("/widget-ui", StaticFiles(directory=WIDGET_STATIC_DIR, html=True), nam
 GREETING_TEXT = (
     "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, "
     "solutions, or company — happy to help."
-)   
+)      
  
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)

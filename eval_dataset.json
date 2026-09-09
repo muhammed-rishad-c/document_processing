@@ -1,6 +1,6 @@
 {
   "dataset_info": {
-    "source_document": "Pasted text.txt",
+    "source_document": "liquidlab_content.txt",
     "note": "Company-data evaluation dataset for comparing Top-K retrieval. expected_sources uses the exact indexed filename, not a document UUID.",
     "categories": {
       "easy": "Q1-Q8",
@@ -16,198 +16,154 @@
       "category": "easy",
       "question": "What is LiquidLab's main focus according to the company overview?",
       "expected_answer": "LiquidLab focuses on designing and building customized solutions, including software, IoT, cloud, hardware, mobile and web applications, and industry-ready systems.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q2",
       "category": "easy",
       "question": "Which industries are listed under LiquidLab's custom software delivery?",
       "expected_answer": "The listed industries are healthcare, logistics, fintech, retail, manufacturing, and legal and professional services.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q3",
       "category": "easy",
       "question": "Which backend technologies are listed in LiquidLab's main technology stack?",
       "expected_answer": "The main backend technologies listed include Node.js, Python, and FastAPI, along with REST APIs and databases such as PostgreSQL, MongoDB, and Redis.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q4",
       "category": "easy",
       "question": "What is LiquidLab's headquarters location?",
       "expected_answer": "LiquidLab's headquarters is in Bengaluru, Karnataka 560043.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q5",
       "category": "easy",
       "question": "What email address is provided for general inquiries?",
       "expected_answer": "The general inquiry email address is info@liquidlab.in.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q6",
       "category": "easy",
       "question": "What are LiquidLab's stated working hours?",
       "expected_answer": "The stated working hours are 10:00 AM to 7:00 PM IST, Monday through Saturday.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q7",
       "category": "easy",
       "question": "Which frameworks are listed for LiquidLab's AI and machine learning work?",
       "expected_answer": "The AI/ML stack lists TensorFlow, PyTorch, OpenCV, Hugging Face, and scikit-learn, with Python as the primary language.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q8",
       "category": "easy",
       "question": "What are the three main layers in the telecom QoS system architecture?",
       "expected_answer": "The three layers are the Android Probe Layer, Cloud Processing Layer, and Visualization Layer.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q9",
       "category": "multi_chunk",
       "question": "How does LiquidLab's custom software development lifecycle progress from an initial idea to ongoing support?",
       "expected_answer": "The lifecycle progresses through Discover, Plan, Design, Engineer, Test, Deploy, and then stabilization, enhancements, and knowledge transfer.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q10",
       "category": "multi_chunk",
       "question": "How does LiquidLab's AI/ML delivery process move a use case from discovery into production and later improvement?",
       "expected_answer": "The process is Discover, Prepare Data, Model, Validate, Deploy, and Improve. It begins by identifying use cases and data constraints, then prepares and trains models, validates them, deploys them with monitoring and fallbacks, and retrains or tunes them as new data arrives.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q11",
       "category": "multi_chunk",
       "question": "What components make up LiquidLab's trolley inventory solution and how do they work together?",
       "expected_answer": "The solution uses trolley-mounted passive UHF RFID tags, fixed RFID gates/readers, portable UHF handheld systems, a cloud inventory dashboard, and integration and alerting. Tags provide unique identities, fixed readers capture movement, the cloud platform updates inventory and zone maps, and alerts and handheld apps help operations teams redistribute the fleet.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q12",
       "category": "multi_chunk",
       "question": "How does the ultrasonic parking solution guide a driver from entering the facility to parking in an available bay?",
       "expected_answer": "A zone display shows available spaces, the driver selects a zone, green ceiling pilot lights guide the driver down the aisle, and the driver parks at an open bay marked by a green light.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q13",
       "category": "multi_chunk",
       "question": "What does LiquidLab's ticketless ANPR parking system provide from vehicle recognition through access control and payment integration?",
       "expected_answer": "The system uses AI-powered number-plate recognition to identify vehicles, authorize or restrict access through whitelist/blacklist management, and control entry gates. It provides real-time analytics and supports payment integrations including FASTag, UPI, wallets, QR codes, and ERP billing.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q14",
       "category": "multi_chunk",
       "question": "How does LiquidLab's employee attendance solution connect employee verification, workforce monitoring, and payroll?",
       "expected_answer": "Employees can check in through face recognition, fingerprints, RFID/NFC, or mobile GPS. The system provides real-time workforce status and automatically sends shift hours, overtime, and approved leave information to payroll, while also supporting anti-spoofing and geofenced verification.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q15",
       "category": "cross_section",
       "question": "Compare LiquidLab's camera-based parking solution with its ultrasonic parking solution in terms of the technology used to detect and communicate parking availability.",
       "expected_answer": "The camera-based solution uses overhead cameras to continuously observe bays and update availability, while the ultrasonic solution uses an ultrasonic sensor for each bay. Both provide live availability, but the ultrasonic system additionally uses ceiling pilot lights and a zone display board for physical guidance.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q16",
       "category": "cross_section",
       "question": "How do LiquidLab's cloud/SaaS solutions and ERP/CRM/HRMS solutions differ in their primary business purpose?",
       "expected_answer": "Cloud/SaaS solutions focus on multi-tenant, cloud-native platforms, subscriptions, tenant isolation, scaling, and cloud modernization. ERP/CRM/HRMS solutions focus on connecting finance, customers, employees, workflows, permissions, reporting, and enterprise operations in unified business systems.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q17",
       "category": "cross_section",
       "question": "Compare the technology and purpose of LiquidLab's AI/ML solutions with its telecom QoS solution.",
       "expected_answer": "The AI/ML offering uses technologies such as Python, TensorFlow, PyTorch, OpenCV, Hugging Face, and scikit-learn for predictive analytics, NLP/LLMs, computer vision, chatbots, fraud detection, and other intelligent systems. The telecom QoS solution uses Android probes, HTTPS/MQTT, cloud analytics, RCA, and dashboards to monitor network performance metrics such as latency, throughput, signal quality, and call quality.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q18",
       "category": "cross_section",
       "question": "How do LiquidLab's DevOps delivery approach and cloud/SaaS delivery approach both address scalability and reliability?",
       "expected_answer": "DevOps emphasizes automated CI/CD, resilient infrastructure, observability, containers, infrastructure as code, health checks, rollbacks, and scalable cloud foundations. Cloud/SaaS emphasizes cloud-native architecture, multi-tenant isolation, secure authentication, autoscaling, reliable platforms, and operational visibility. Both aim to support growth without sacrificing reliability or control.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q19",
       "category": "ambiguous_pair",
       "question": "What is the response time stated on LiquidLab's contact page?",
       "expected_answer": "The contact page says the team responds within 24 hours.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q20",
       "category": "ambiguous_pair",
       "question": "What is the recognition speed of LiquidLab's ticketless ANPR parking system?",
       "expected_answer": "The ANPR system states a recognition or detection time of under one second per vehicle.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q21",
       "category": "ambiguous_pair",
       "question": "What percentage of inventory accuracy is claimed for LiquidLab's airport trolley tracking solution?",
       "expected_answer": "The trolley inventory solution claims 99.9% inventory accuracy.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q22",
       "category": "ambiguous_pair",
       "question": "What is the average finding time shown for the ultrasonic parking solution before and after guidance?",
       "expected_answer": "The displayed average finding time is reduced from 8.2 minutes to under 1.5 minutes.",
-      "expected_sources": [
-        "Pasted text.txt"
-      ]
+      "expected_sources": ["liquidlab_content.txt"]
     },
     {
       "id": "Q23",

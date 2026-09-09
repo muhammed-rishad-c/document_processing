@@ -17,7 +17,7 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 BASE_URL = "http://localhost:9000"
 DOCUMENTS_ENDPOINT = f"{BASE_URL}/documents"
 CHAT_ENDPOINT = f"{BASE_URL}/documents/chat"
-TOP_K_VALUES = [4, 5, 6, 7, 8]
+TOP_K_VALUES = [4, 5]
 
 REQUEST_DELAY_SECONDS = 1.5
 BETWEEN_PASS_DELAY_SECONDS = 5

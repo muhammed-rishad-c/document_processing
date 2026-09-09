@@ -131,6 +131,7 @@ class FeedbackRequest(BaseModel):
     
     
 class WidgetSessionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     title: Optional[str] = None
 
 
