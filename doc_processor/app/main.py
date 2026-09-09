@@ -27,7 +27,7 @@ from .schemas import (
     DocumentDetailResponse,
     DocumentUploadResponse,
     SemanticSearchResponse,
-    SemanticSearchRequest,
+    SemanticSearchRequest, 
     RAGRequest,
     RAGResponse,
     ChunkSource,
@@ -63,7 +63,7 @@ from slowapi.errors import RateLimitExceeded
 from .rate_limit import limiter
 
 from .widget import router as widget_router
-
+from .internal import router as internal_router
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -93,6 +93,7 @@ app.add_middleware(
 )  
 app.state.limiter = limiter
 
+app.include_router(internal_router)
 app.include_router(widget_router)
 WIDGET_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static", "widget")
 app.mount("/widget-ui", StaticFiles(directory=WIDGET_STATIC_DIR, html=True), name="widget-ui")

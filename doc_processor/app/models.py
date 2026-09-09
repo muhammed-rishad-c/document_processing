@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, String, Text,Integer,ForeignKey
+from sqlalchemy import Column, DateTime, String, Text,Integer,ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -35,8 +35,10 @@ class ChatSession(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String, nullable=True, default="New Conversation")
-    document_id = Column(UUID(as_uuid=True), nullable=True) 
+    document_id = Column(UUID(as_uuid=True), nullable=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
     
 class ChatMessage(Base):
@@ -49,4 +51,15 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     session = relationship("ChatSession", back_populates="messages")
+    
+class Company(Base):
+    __tablename__ = "companies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    api_key = Column(String, nullable=False, unique=True, index=True)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    allowed_origins = Column(JSONB, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     

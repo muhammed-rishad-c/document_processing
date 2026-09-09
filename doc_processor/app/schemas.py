@@ -144,3 +144,21 @@ class WidgetChatRequest(BaseModel):
 class WidgetChatResponse(BaseModel):
     session_id: UUID
     answer: str
+    
+class CompanyCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    document_id: UUID
+    allowed_origins: List[str]
+
+
+class CompanyResponse(BaseModel):
+    id: UUID
+    name: str
+    api_key: str
+    document_id: UUID
+    allowed_origins: List[str]
+    is_active: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
