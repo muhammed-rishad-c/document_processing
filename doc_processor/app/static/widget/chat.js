@@ -13,11 +13,25 @@ function getEmbedOrigin() {
 }
 
 function formatText(text) {
-  return text
+  let safe = text
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/^- (.+)$/gm, "• $1")
-    .replace(/\n/g, "<br>");
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  const lines = safe.split("\n");
+  let html = "";
+  let inList = false;
+  for (const line of lines) {
+    const bulletMatch = line.match(/^-\s+(.*)/);
+    if (bulletMatch) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += `<li>${bulletMatch[1]}</li>`;
+    } else {
+      if (inList) { html += "</ul>"; inList = false; }
+      if (line.trim() !== "") html += `<p>${line}</p>`;
+    }
+  }
+  if (inList) html += "</ul>";
+  return html;
 }
 
 function renderMessage(role, text) {

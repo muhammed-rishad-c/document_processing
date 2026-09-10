@@ -160,7 +160,7 @@ async def read_index():
 
 @app.get("/documents", response_model=list[DocumentResponse])
 def list_documents(db: Session = Depends(get_db)):
-    return db.query(Document).all()
+    return db.query(Document).all() 
  
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():

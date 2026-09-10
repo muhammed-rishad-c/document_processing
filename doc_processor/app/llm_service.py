@@ -12,20 +12,20 @@ from .service import count_token
 
 load_dotenv()
 
-OPENROUTER_API_KEY = os.getenv("OPEN_API_KEY")
-
-MAX_CONTEXT_TOKENS = 4000
-MODEL_NAME = "openrouter/free"
-
 EXTRA_HEADERS = {
     "HTTP-Referer": "http://localhost:9000",
     "X-Title": "LiquidLab RAG App",
 }
+MAX_CONTEXT_TOKENS = 4000
+
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
+LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("OPEN_API_KEY"))
+MODEL_NAME = os.getenv("LLM_MODEL_NAME", "openrouter/free")
 
 llm = ChatOpenAI(
     model=MODEL_NAME,
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
+    base_url=LLM_BASE_URL,
+    api_key=LLM_API_KEY,
     temperature=0.3,
     default_headers=EXTRA_HEADERS,
 )
