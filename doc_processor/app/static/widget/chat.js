@@ -29,6 +29,21 @@ function renderMessage(role, text) {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
+function showTypingIndicator() {
+  const messagesDiv = document.getElementById("messages");
+  const bubble = document.createElement("div");
+  bubble.id = "typing-indicator";
+  bubble.className = "thinking-bubble";
+  bubble.innerHTML = "<span></span><span></span><span></span>";
+  messagesDiv.appendChild(bubble);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function hideTypingIndicator() {
+  const bubble = document.getElementById("typing-indicator");
+  if (bubble) bubble.remove();
+}
+
 async function createSession() {
   const apiKey = getApiKey();
   const embedOrigin = getEmbedOrigin();
@@ -90,10 +105,11 @@ async function sendMessage() {
 
   renderMessage("user", query);
   input.value = "";
+  showTypingIndicator();                    // <-- added
 
   const embedOrigin = getEmbedOrigin();
 
-  const res = await fetch(`${API_BASE}/widget/chat`, {
+  const res = await fetch(`${API_BASE}/widget/chat?session_id=${sessionId}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -101,6 +117,8 @@ async function sendMessage() {
     },
     body: JSON.stringify({ session_id: sessionId, query: query }),
   });
+
+  hideTypingIndicator();                    // <-- added
 
   if (!res.ok) {
     renderMessage("assistant", "Sorry, something went wrong. Please try again.");

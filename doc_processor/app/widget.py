@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, Response
 from sqlalchemy.orm import Session
 from fastapi import Request
+from slowapi.util import get_remote_address
 
 from .database import get_db
 from .models import ChatSession, ChatMessage, Company
@@ -12,12 +13,18 @@ from .schemas import (
 )
 from .llm_service import generate_rag_answer_with_memory
 from .vector_store import search_similar_chunks
-from .rate_limit import limiter
+from .rate_limit import limiter,key_func_by_api_key,key_func_by_session_id
+
 
 GREETING_TEXT = (
     "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, "
     "solutions, or company -- happy to help."
 )
+
+def _session_ip_backstop(request: Request):
+    pass
+
+_session_ip_backstop = limiter.limit("60/minute", key_func=get_remote_address)(_session_ip_backstop)
 
 router = APIRouter(prefix="/widget", tags=["public-widget"])
 
@@ -57,12 +64,13 @@ def get_company_from_api_key(
 
 
 @router.post("/session", response_model=ChatSessionResponse, status_code=201)
-@limiter.limit("20/minute")
+@limiter.limit("20/minute", key_func=key_func_by_api_key)
 def create_widget_session(
     request: Request,
     response: Response,
     payload: WidgetSessionCreate,
     db: Session = Depends(get_db),
+    _backstop: None = Depends(_session_ip_backstop),
     company: Company = Depends(get_company_from_api_key),
 ):
     session = ChatSession(
@@ -81,7 +89,8 @@ def create_widget_session(
 
 
 @router.post("/chat", response_model=WidgetChatResponse)
-@limiter.limit("10/minute")
+@limiter.limit("10/minute", key_func=key_func_by_session_id)
+@limiter.limit("30/minute", key_func=get_remote_address)
 def widget_chat(
     request: Request,
     response: Response,

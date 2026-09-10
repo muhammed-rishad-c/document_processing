@@ -115,7 +115,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 def startup_event():
     init_qdrant()
     
-    
+     
 @app.middleware("http")
 async def analytics_middleware(request: Request, call_next):
     start = time.perf_counter()
@@ -161,7 +161,7 @@ async def read_index():
 @app.get("/documents", response_model=list[DocumentResponse])
 def list_documents(db: Session = Depends(get_db)):
     return db.query(Document).all()
-
+ 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
