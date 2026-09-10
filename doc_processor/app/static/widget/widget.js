@@ -1,9 +1,9 @@
 (function () {
   const scriptTag = document.currentScript;
   const apiBase = scriptTag.getAttribute("data-api");
+  const apiKey = scriptTag.getAttribute("data-api-key");
   const STORAGE_KEY = "liquidlab_chat_session_id";
 
-  // --- Floating bubble button ---
   const bubble = document.createElement("button");
   bubble.textContent = "💬";
   bubble.style.cssText = `
@@ -14,7 +14,6 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   `;
 
-  // --- Iframe (hidden until opened) ---
   const iframe = document.createElement("iframe");
   iframe.style.cssText = `
     position: fixed; bottom: 90px; right: 20px;
@@ -29,6 +28,16 @@
     if (existingId) {
       url.searchParams.set("sid", existingId);
     }
+    if (apiKey) {
+      url.searchParams.set("key", apiKey);
+    }
+    // The iframe is hosted on our own backend domain, so the browser's
+    // native Origin header on API calls made from inside it will always
+    // be our backend's own origin — not the site that embedded us. We
+    // capture the real embedding page's origin here, where it's still
+    // trustworthy (JS cannot fake window.location.origin), and pass it
+    // along explicitly so the backend can check the real embedding site.
+    url.searchParams.set("embed_origin", window.location.origin);
     return url.toString();
   }
 
@@ -42,7 +51,6 @@
     iframe.style.display = iframe.style.display === "none" ? "block" : "none";
   });
 
-  // --- Listen for a newly created session ID from the iframe ---
   window.addEventListener("message", (event) => {
     if (event.origin !== apiBase) return;
     if (event.data && event.data.type === "liquidlab-session-created") {

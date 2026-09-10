@@ -64,6 +64,8 @@ from .rate_limit import limiter
 
 from .widget import router as widget_router
 from .internal import router as internal_router
+from .widget_cors import WidgetCorsMiddleware,ConditionalCORSMiddleware
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -76,6 +78,7 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
 load_dotenv()
 
 ALLOWED_ORIGINS = [
@@ -85,13 +88,15 @@ ALLOWED_ORIGINS = [
 ]
 
 app.add_middleware(
-    CORSMiddleware,
+    ConditionalCORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],  
+    allow_methods=["*"],
     allow_headers=["*"],
-)  
-app.state.limiter = limiter
+)
+app.add_middleware(WidgetCorsMiddleware)
+ 
+
 
 app.include_router(internal_router)
 app.include_router(widget_router)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Response
 from sqlalchemy.orm import Session
 from fastapi import Request
 
@@ -22,13 +22,37 @@ GREETING_TEXT = (
 router = APIRouter(prefix="/widget", tags=["public-widget"])
 
 
+def _check_origin_and_allow(request: Request, response: Response, company: Company):
+    """
+    The widget runs inside an iframe hosted on our own backend, so the
+    browser's native Origin header on these requests is always our own
+    domain, not the site that embedded the widget. The real embedding
+    site is instead sent explicitly as X-Embed-Origin (set by chat.js,
+    sourced from widget.js's window.location.origin — a value page
+    JavaScript cannot forge). We check that value against the company's
+    allowed list. The actual CORS response header still echoes the
+    real browser Origin, since that's what the browser itself checks.
+    """
+    embed_origin = request.headers.get("x-embed-origin")
+    allowed = company.allowed_origins or []
+    if not embed_origin or embed_origin not in allowed:
+        raise HTTPException(status_code=403, detail="Origin not allowed for this company.")
+
+    browser_origin = request.headers.get("origin", "*")
+    response.headers["Access-Control-Allow-Origin"] = browser_origin
+    response.headers["Vary"] = "Origin"
+
+
 def get_company_from_api_key(
+    request: Request,
+    response: Response,
     x_api_key: str = Header(...),
     db: Session = Depends(get_db),
 ) -> Company:
     company = db.query(Company).filter(Company.api_key == x_api_key).first()
     if not company or not company.is_active:
         raise HTTPException(status_code=401, detail="Invalid API key.")
+    _check_origin_and_allow(request, response, company)
     return company
 
 
@@ -36,6 +60,7 @@ def get_company_from_api_key(
 @limiter.limit("20/minute")
 def create_widget_session(
     request: Request,
+    response: Response,
     payload: WidgetSessionCreate,
     db: Session = Depends(get_db),
     company: Company = Depends(get_company_from_api_key),
@@ -57,7 +82,12 @@ def create_widget_session(
 
 @router.post("/chat", response_model=WidgetChatResponse)
 @limiter.limit("10/minute")
-def widget_chat(request: Request, payload: WidgetChatRequest, db: Session = Depends(get_db)):
+def widget_chat(
+    request: Request,
+    response: Response,
+    payload: WidgetChatRequest,
+    db: Session = Depends(get_db),
+):
     session = db.query(ChatSession).filter(ChatSession.id == payload.session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
@@ -65,6 +95,8 @@ def widget_chat(request: Request, payload: WidgetChatRequest, db: Session = Depe
     company = db.query(Company).filter(Company.id == session.company_id).first()
     if not company or not company.is_active:
         raise HTTPException(status_code=401, detail="This session is no longer active.")
+
+    _check_origin_and_allow(request, response, company)
 
     all_messages = (
         db.query(ChatMessage)

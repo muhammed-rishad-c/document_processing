@@ -2,6 +2,16 @@ const API_BASE = "http://localhost:9000";
 let sessionId = null;
 let selectedRating = 0;
 
+function getApiKey() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("key");
+}
+
+function getEmbedOrigin() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("embed_origin");
+}
+
 function formatText(text) {
   return text
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -20,11 +30,29 @@ function renderMessage(role, text) {
 }
 
 async function createSession() {
+  const apiKey = getApiKey();
+  const embedOrigin = getEmbedOrigin();
+
+  if (!apiKey) {
+    renderMessage("assistant", "This chat widget isn't configured correctly. Please contact the site owner.");
+    return;
+  }
+
   const res = await fetch(`${API_BASE}/widget/session`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+      "X-Embed-Origin": embedOrigin || "",
+    },
     body: JSON.stringify({}),
   });
+
+  if (!res.ok) {
+    renderMessage("assistant", "Sorry, I couldn't start a new conversation. Please try again shortly.");
+    return;
+  }
+
   const data = await res.json();
   sessionId = data.id;
   renderMessage("assistant", "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, solutions, or company.");
@@ -63,9 +91,14 @@ async function sendMessage() {
   renderMessage("user", query);
   input.value = "";
 
+  const embedOrigin = getEmbedOrigin();
+
   const res = await fetch(`${API_BASE}/widget/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Embed-Origin": embedOrigin || "",
+    },
     body: JSON.stringify({ session_id: sessionId, query: query }),
   });
 
