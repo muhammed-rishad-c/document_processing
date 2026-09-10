@@ -1,5 +1,27 @@
 [
   {
+    "chunk_size": 400,
+    "chunk_overlap": 50,
+    "eval_top_k": 6,
+    "questions_run": 25,
+    "avg_latency_ms": 12114.7,
+    "top1_accuracy_pct": 100.0,
+    "top3_accuracy_pct": 100.0,
+    "avg_cosine_similarity_pct": 63.66,
+    "avg_context_tokens_est": 0
+  },
+  {
+    "chunk_size": 450,
+    "chunk_overlap": 50,
+    "eval_top_k": 6,
+    "questions_run": 25,
+    "avg_latency_ms": 11920.85,
+    "top1_accuracy_pct": 100.0,
+    "top3_accuracy_pct": 100.0,
+    "avg_cosine_similarity_pct": 68.37,
+    "avg_context_tokens_est": 0
+  },
+  {
     "chunk_size": 500,
     "chunk_overlap": 50,
     "eval_top_k": 6,

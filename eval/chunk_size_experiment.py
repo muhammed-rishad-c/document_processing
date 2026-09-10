@@ -79,7 +79,7 @@ SOURCE_FILES: list[str] = [
     "eval/liquidlab_content.txt",
 ]
 
-CHUNK_SIZES = [400, 500, 600]
+CHUNK_SIZES = [450, 600]
 CHUNK_OVERLAP = 50   # fixed across all runs — see docstring
 
 # PLACEHOLDER — see "NOTE (company-data run)" in the module docstring above.
@@ -97,7 +97,7 @@ EVAL_TOP_K = 6        # fixed across all runs — see docstring
 # results/chunk_size_experiment_results.json across runs/days —
 # already-completed chunk sizes are skipped automatically unless
 # FORCE_RERUN=True.
-RUN_TODAY = [400, 500]
+RUN_TODAY = [450, 600]
 
 # Hard stop once this many LLM calls have been made in this invocation, even
 # mid-value, leaving headroom under the 50/day cap for retries. A chunk size

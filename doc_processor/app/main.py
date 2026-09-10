@@ -20,7 +20,8 @@ from .models import (
     Document,
     DocumentChunk,
     ChatSession,
-    ChatMessage
+    ChatMessage,
+    Company
 )
 from .schemas import (
     DocumentResponse,
@@ -188,7 +189,7 @@ async def upload_document(
         stats = calculate_document_stats(text)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+       
     doc = Document(
             filename=file.filename,
             file_type=file_type,
@@ -288,14 +289,18 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found.")
- 
-    doc_id_str = str(doc.id)
 
+    affected_companies = db.query(Company).filter(Company.document_id == doc_id).all()
+    if affected_companies:
+        print(f"[delete_document] WARNING: deleting doc {doc_id} will cascade-delete "
+              f"{len(affected_companies)} company(ies): "
+              f"{[(c.id, c.name) for c in affected_companies]}")
+
+    doc_id_str = str(doc.id)
     try:
         delete_vector(doc_id_str)
     except Exception as e:
         print(f"Warning: Failed to delete Qdrant vectors for doc {doc_id_str}: {str(e)}")
-        
 
     saved_path = os.path.join(UPLOAD_DIR, f"{doc.id}_{doc.filename}")
     if os.path.exists(saved_path):
@@ -306,7 +311,7 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
 
     return {
         "message": "Document successfully deleted from PostgreSQL, Qdrant, and local storage.",
-        "deleted_id": doc_id_str
+        "cascade_deleted_companies": [str(c.id) for c in affected_companies],
     }
 
 @app.post("/documents/search", response_model=SemanticSearchResponse)

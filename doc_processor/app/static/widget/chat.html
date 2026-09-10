@@ -2,20 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LiquidLab Chat</title>
   <link rel="stylesheet" href="chat.css">
 </head>
 <body>
   <div id="chat-container">
     <div id="chat-header">
-      <span>LiquidLab Assistant</span>
-      <button id="close-btn">✕</button>
+      <div id="header-title">
+        <span id="brand-mark" aria-hidden="true"></span>
+        <span> Assistant</span>
+      </div>
+      <button id="close-btn" aria-label="Close chat">✕</button>
     </div>
 
     <div id="messages"></div>
 
     <div id="input-row">
-      <input type="text" id="query-input" placeholder="Ask about the company..." />
+      <input type="text" id="query-input" placeholder="Ask about LiquidLab..." autocomplete="off" />
       <button id="send-btn">Send</button>
     </div>
 
@@ -33,12 +37,14 @@
         <div id="feedback-actions">
           <button id="skip-btn">Skip</button>
           <button id="submit-feedback-btn">Submit</button>
-        </div> 
+        </div>
       </div>
     </div>
 
     <div id="ended-message" class="hidden">
-      <p>Thanks for chatting! 👋</p>
+      <div id="ended-check" aria-hidden="true">✓</div>
+      <p>Thanks for chatting!</p>
+      <p id="ended-subtext">We hope i could help.</p>
     </div>
   </div>
 
