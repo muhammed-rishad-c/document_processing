@@ -18,14 +18,13 @@ EXTRA_HEADERS = {
 }
 MAX_CONTEXT_TOKENS = 4000
 
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("OPEN_API_KEY"))
-MODEL_NAME = os.getenv("LLM_MODEL_NAME", "openrouter/free")
+OPENROUTER_API_KEY = os.getenv("OPEN_API_KEY")
+MODEL_NAME = "openrouter/free"
 
 llm = ChatOpenAI(
     model=MODEL_NAME,
-    base_url=LLM_BASE_URL,
-    api_key=LLM_API_KEY,
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY,
     temperature=0.3,
     default_headers=EXTRA_HEADERS,
 )

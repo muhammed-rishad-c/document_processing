@@ -73,8 +73,8 @@ app = FastAPI(
     title="Mini Document Processing System",
     description="API for uploading, analyzing, searching, and comparing documents.",
     version="2.0.0"
-)
-
+) 
+  
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -291,6 +291,10 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Document not found.")
 
     affected_companies = db.query(Company).filter(Company.document_id == doc_id).all()
+    
+    # Extract IDs *before* deletion so we can safely return them later
+    cascade_company_ids = [str(c.id) for c in affected_companies]
+
     if affected_companies:
         print(f"[delete_document] WARNING: deleting doc {doc_id} will cascade-delete "
               f"{len(affected_companies)} company(ies): "
@@ -311,8 +315,8 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
 
     return {
         "message": "Document successfully deleted from PostgreSQL, Qdrant, and local storage.",
-        "cascade_deleted_companies": [str(c.id) for c in affected_companies],
-    }
+        "cascade_deleted_companies": cascade_company_ids, # Use the pre-saved list here
+    } 
 
 @app.post("/documents/search", response_model=SemanticSearchResponse)
 def semantic_search(request: SemanticSearchRequest):
@@ -498,7 +502,7 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
     )
     
     db.add_all([user_msg, assistant_msg])
-    db.commit()
+    db.commit() 
 
     formatted_sources = [
         ChunkSource(
