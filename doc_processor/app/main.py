@@ -54,7 +54,7 @@ from .vector_store import (
     search_similar_chunks
     
 ) 
-
+  
 from .llm_service import(
     generate_rag_answer_with_memory,
 )
@@ -94,7 +94,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
+) 
 app.add_middleware(WidgetCorsMiddleware)
  
 

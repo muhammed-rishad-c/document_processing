@@ -76,7 +76,7 @@ def get_company_from_api_key(
     x_api_key: str = Header(...),
     db: Session = Depends(get_db),
 ) -> Company:
-    company = db.query(Company).filter(Company.api_key == x_api_key).first()
+    company = db.query(Company).filter(Company.tenant_id == x_api_key).first()
     if not company or not company.is_active:
         raise HTTPException(status_code=401, detail="Invalid API key.")
     _check_origin_and_allow(request, response, company)

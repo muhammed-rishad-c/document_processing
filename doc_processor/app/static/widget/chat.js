@@ -71,7 +71,7 @@ async function createSession() {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Tenant-Id": tenantId,
+      "X-API-Key": tenantId,
       "X-Embed-Origin": embedOrigin || "",
     },
     body: JSON.stringify({}),
@@ -154,7 +154,6 @@ function endConversation() {
   // Auto-close the widget a couple seconds after showing the thank-you
   // message, so the visitor doesn't have to click anything. Reopening via
   // the bubble (widget.js) will reset this view back to the conversation.
-  console.log("[chat.js] scheduling auto-close, window.parent !== window:", window.parent !== window);
   if (window.parent !== window) {
     setTimeout(() => {
       window.parent.postMessage({ type: "liquidlab-close-widget" }, "*");

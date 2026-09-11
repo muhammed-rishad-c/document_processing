@@ -10,24 +10,24 @@ __pycache__/
 .env
 .env.local
 
-# Database files (if using local SQLite during testing)
+# Database files
 *.db
 *.sqlite3
 
-# Uploaded documents directory (keep directory structure, ignore uploaded files)
+# Uploaded docs (ignore files but keep folder)
 doc_processor/app/uploads/*
 !doc_processor/app/uploads/.gitkeep
 
-# IDEs & System files
+# IDEs & system files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# Local sentence-transformer model (downloaded via one-time script, not versioned)
+# Local models & logs
 doc_processor/app/models/
-
 doc_processor/app/analytics_log.jsonl
 doc_processor/app/feedback_log.jsonl
 qdrant_storage/
-doc_processor/app/leads
+doc_processor/app/leads/
+
