@@ -155,7 +155,7 @@ class CompanyCreate(BaseModel):
 class CompanyResponse(BaseModel):
     id: UUID
     name: str
-    api_key: str
+    tenant_id: str
     document_id: UUID
     allowed_origins: List[str]
     is_active: bool

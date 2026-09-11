@@ -1,7 +1,7 @@
 (function () {
   const scriptTag = document.currentScript;
   const apiBase = scriptTag.getAttribute("data-api");
-  const apiKey = scriptTag.getAttribute("data-api-key");
+  const tenantId = scriptTag.getAttribute("data-tenant-id");
   const STORAGE_KEY = "liquidlab_chat_session_id";
 
   const API_ORIGIN = new URL(apiBase).origin;
@@ -30,8 +30,8 @@
     if (existingId) {
       url.searchParams.set("sid", existingId);
     }
-    if (apiKey) {
-      url.searchParams.set("key", apiKey);
+    if (tenantId) {
+      url.searchParams.set("tenant", tenantId);
     }
     url.searchParams.set("embed_origin", window.location.origin);
     return url.toString();

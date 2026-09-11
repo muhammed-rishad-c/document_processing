@@ -2,9 +2,9 @@ const API_BASE = "http://localhost:9000";
 let sessionId = null;
 let selectedRating = 0;
 
-function getApiKey() {
+function getTenantId() {
   const params = new URLSearchParams(window.location.search);
-  return params.get("key");
+  return params.get("tenant");
 }
 
 function getEmbedOrigin() {
@@ -59,10 +59,10 @@ function hideTypingIndicator() {
 }
 
 async function createSession() {
-  const apiKey = getApiKey();
+  const tenantId = getTenantId();
   const embedOrigin = getEmbedOrigin();
 
-  if (!apiKey) {
+  if (!tenantId) {
     renderMessage("assistant", "This chat widget isn't configured correctly. Please contact the site owner.");
     return;
   }
@@ -71,7 +71,7 @@ async function createSession() {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": apiKey,
+      "X-Tenant-Id": tenantId,
       "X-Embed-Origin": embedOrigin || "",
     },
     body: JSON.stringify({}),

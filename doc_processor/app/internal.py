@@ -41,7 +41,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 
     company = Company(
         name=payload.name,
-        api_key=secrets.token_urlsafe(32),
+        tenant_id=secrets.token_urlsafe(32),
         document_id=payload.document_id,
         allowed_origins=payload.allowed_origins,
         is_active=True,

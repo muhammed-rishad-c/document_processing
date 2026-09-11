@@ -253,7 +253,7 @@ async def upload_document(
         "document_processing_ms": round((t_proc_end - t_proc_start) * 1000, 2),
         "chunk_embedding_ms": round((t_embed_end - t_embed_start) * 1000, 2),
     }
-        
+         
     try:
         db.add_all(db_chunks)
         db.commit()

@@ -60,7 +60,7 @@ class Company(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
-    api_key = Column(String, nullable=False, unique=True, index=True)
+    tenant_id = Column(String, nullable=False, unique=True, index=True)
     document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
     allowed_origins = Column(JSONB, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
