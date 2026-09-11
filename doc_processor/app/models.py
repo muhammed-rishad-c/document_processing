@@ -37,8 +37,12 @@ class ChatSession(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+    awaiting_lead_capture = Column(Boolean, nullable=False, default=False, server_default="false")
+    pending_lead_query = Column(Text, nullable=True)
+    lead_capture_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
-    company = relationship("Company", back_populates="chat_sessions")
+    company = relationship("Company", back_populates="chat_sessions")\
     
 class ChatMessage(Base):
     __tablename__ = "chat_messages"

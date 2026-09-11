@@ -1,6 +1,7 @@
 import os
 import time
 import re
+import json as _json 
 
 from dotenv import load_dotenv
 
@@ -18,13 +19,14 @@ EXTRA_HEADERS = {
 }
 MAX_CONTEXT_TOKENS = 4000
 
-OPENROUTER_API_KEY = os.getenv("OPEN_API_KEY")
-MODEL_NAME = "openrouter/free"
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
+LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("OPEN_API_KEY"))
+MODEL_NAME = os.getenv("LLM_MODEL_NAME", "openrouter/free")
 
 llm = ChatOpenAI(
     model=MODEL_NAME,
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
+    base_url=LLM_BASE_URL,
+    api_key=LLM_API_KEY,
     temperature=0.3,
     default_headers=EXTRA_HEADERS,
 )
@@ -37,6 +39,10 @@ rag_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 rag_chain = rag_prompt | llm
+
+NO_ANSWER_TEXT = "I cannot find the answer in the provided document context."
+EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+PHONE_PATTERN = re.compile(r"(\+?\d[\d\-\s()]{7,}\d)")
 
 
 def _to_lc_messages(history: list[dict]) -> list:
@@ -116,6 +122,16 @@ LEAD_IN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+EXTRACTION_PROMPT = (
+    "Extract the visitor's contact details from the message below. "
+    "Respond with ONLY a JSON object, no other text, no markdown fences, "
+    "in exactly this shape: "
+    '{{"name": null or string, "email": null or string, "phone": null or string}}. '
+    "If a field is not present in the message, use null for it. "
+    "Do not guess or invent values.\n\n"
+    "Message: {message}"
+)
+
 def generate_rag_answer_with_memory(
     user_query: str,
     retrieved_chunks: list[dict],
@@ -153,7 +169,7 @@ def generate_rag_answer_with_memory(
             "6. Do not include chunk tags, document IDs, or metadata inside the answer text.\n"
             "7. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
             "8. If there is no document context or chat history available, reply EXACTLY with: "
-            '"I cannot find the answer in the provided document context."\n\n'
+            f'"{NO_ANSWER_TEXT}"\n\n'
             f"--- DOCUMENT CONTEXT ---\n{doc_context}\n"
         )
     else:
@@ -176,7 +192,7 @@ def generate_rag_answer_with_memory(
             "7. Do not cite chunk tags, doc IDs, or metadata inside the answer text.\n"
             "8. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
             "9. If the answer cannot be found in the provided context or chat history, reply EXACTLY with: "
-            '"I cannot find the answer in the provided document context."\n\n'
+            f'"{NO_ANSWER_TEXT}"\n\n'
             f"--- DOCUMENT CONTEXT ---\n{doc_context}\n"
         )
 
@@ -214,7 +230,7 @@ def generate_rag_answer_with_memory(
         cleaned_text += "\n\nAsk if you'd like the full list."
 
     if not cleaned_text:
-        cleaned_text = "I cannot find the answer in the provided document context."
+        cleaned_text = NO_ANSWER_TEXT
 
     usage = ai_message.usage_metadata or {}
 
@@ -226,3 +242,39 @@ def generate_rag_answer_with_memory(
         "context_prep_ms": round((t_ctx_end - t_ctx_start) * 1000, 2),
         "llm_generation_ms": round((t_llm_end - t_llm_start) * 1000, 2),
     }
+    
+
+
+def extract_lead_info(message: str) -> dict:
+    """Best-effort extraction of name/email/phone from a free-text visitor reply.
+    Never raises — always returns a dict with the three keys, using None for
+    anything it couldn't confidently find. LLM does name extraction (no
+    reliable regex for that); email/phone are validated/recovered with regex
+    since those have unambiguous formats."""
+    result = {"name": None, "email": None, "phone": None}
+
+    try:
+        ai_message = llm.invoke(EXTRACTION_PROMPT.format(message=message))
+        raw = ai_message.content.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = _json.loads(raw)
+        if isinstance(parsed, dict):
+            result["name"] = parsed.get("name") or None
+            result["email"] = parsed.get("email") or None
+            result["phone"] = parsed.get("phone") or None
+    except Exception as e:
+        print(f"[extract_lead_info] LLM extraction failed, falling back to regex only: {e}")
+
+    
+    if not result["email"] or not EMAIL_PATTERN.fullmatch(result["email"].strip()):
+        email_match = EMAIL_PATTERN.search(message)
+        result["email"] = email_match.group(0) if email_match else None
+
+    if not result["phone"]:
+        phone_match = PHONE_PATTERN.search(message)
+        result["phone"] = phone_match.group(0).strip() if phone_match else None
+
+    if isinstance(result["name"], str):
+        result["name"] = result["name"].strip() or None
+
+    return result

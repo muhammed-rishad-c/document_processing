@@ -266,7 +266,7 @@ async def upload_document(
     with open(saved_path, "wb") as f:
         f.write(file_bytes)
         
-    
+        
         
     return {
         "document_id":doc.id,
