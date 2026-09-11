@@ -4,6 +4,8 @@
   const apiKey = scriptTag.getAttribute("data-api-key");
   const STORAGE_KEY = "liquidlab_chat_session_id";
 
+  const API_ORIGIN = new URL(apiBase).origin;
+
   const bubble = document.createElement("button");
   bubble.textContent = "💬";
   bubble.style.cssText = `
@@ -24,37 +26,57 @@
 
   function buildIframeSrc() {
     const existingId = localStorage.getItem(STORAGE_KEY);
-    const url = new URL(`${apiBase}/widget-ui/chat.html`);
+    const url = new URL(`${API_ORIGIN}/widget-ui/chat.html`);
     if (existingId) {
       url.searchParams.set("sid", existingId);
     }
     if (apiKey) {
       url.searchParams.set("key", apiKey);
     }
-    // The iframe is hosted on our own backend domain, so the browser's
-    // native Origin header on API calls made from inside it will always
-    // be our backend's own origin — not the site that embedded us. We
-    // capture the real embedding page's origin here, where it's still
-    // trustworthy (JS cannot fake window.location.origin), and pass it
-    // along explicitly so the backend can check the real embedding site.
     url.searchParams.set("embed_origin", window.location.origin);
     return url.toString();
   }
 
   let iframeLoaded = false;
+  let iframeReady = false;
+
+  iframe.addEventListener("load", () => {
+    iframeReady = true;
+  });
+
+  function sendResumeMessage() {
+    iframe.contentWindow.postMessage({ type: "liquidlab-resume-chat" }, API_ORIGIN);
+  }
 
   bubble.addEventListener("click", () => {
     if (!iframeLoaded) {
       iframe.src = buildIframeSrc();
       iframeLoaded = true;
     }
-    iframe.style.display = iframe.style.display === "none" ? "block" : "none";
+    const opening = iframe.style.display === "none";
+    iframe.style.display = opening ? "block" : "none";
+
+    if (opening) {
+      if (iframeReady) {
+        // Iframe already finished loading from a previous open — safe to
+        // send immediately.
+        sendResumeMessage();
+      } else {
+        // Iframe is still navigating (first open, or page just loaded) —
+        // wait for it to actually finish before sending, otherwise the
+        // browser rejects the message as a same-origin/about:blank mismatch.
+        iframe.addEventListener("load", sendResumeMessage, { once: true });
+      }
+    }
   });
 
   window.addEventListener("message", (event) => {
-    if (event.origin !== apiBase) return;
+    if (event.origin !== API_ORIGIN) return;
     if (event.data && event.data.type === "liquidlab-session-created") {
       localStorage.setItem(STORAGE_KEY, event.data.sessionId);
+    }
+    if (event.data && event.data.type === "liquidlab-close-widget") {
+      iframe.style.display = "none";
     }
   });
 

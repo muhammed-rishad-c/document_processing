@@ -119,7 +119,7 @@ async function sendMessage() {
 
   renderMessage("user", query);
   input.value = "";
-  showTypingIndicator();                    // <-- added
+  showTypingIndicator();
 
   const embedOrigin = getEmbedOrigin();
 
@@ -132,7 +132,7 @@ async function sendMessage() {
     body: JSON.stringify({ session_id: sessionId, query: query }),
   });
 
-  hideTypingIndicator();                    // <-- added
+  hideTypingIndicator();
 
   if (!res.ok) {
     renderMessage("assistant", "Sorry, something went wrong. Please try again.");
@@ -150,6 +150,16 @@ function openFeedback() {
 function endConversation() {
   document.getElementById("feedback-overlay").classList.add("hidden");
   document.getElementById("ended-message").classList.remove("hidden");
+
+  // Auto-close the widget a couple seconds after showing the thank-you
+  // message, so the visitor doesn't have to click anything. Reopening via
+  // the bubble (widget.js) will reset this view back to the conversation.
+  console.log("[chat.js] scheduling auto-close, window.parent !== window:", window.parent !== window);
+  if (window.parent !== window) {
+    setTimeout(() => {
+      window.parent.postMessage({ type: "liquidlab-close-widget" }, "*");
+    }, 2000);
+  }
 }
 
 async function submitFeedback() {
@@ -180,6 +190,16 @@ document.querySelectorAll(".star").forEach((star) => {
       s.classList.toggle("selected", parseInt(s.dataset.value, 10) <= selectedRating);
     });
   });
+});
+
+// Parent (widget.js) tells us to reset back to the normal chat view when
+// the visitor reopens the widget after a previous conversation ended.
+window.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "liquidlab-resume-chat") {
+    document.getElementById("ended-message").classList.add("hidden");
+    document.getElementById("messages").classList.remove("hidden");
+    document.getElementById("input-row").classList.remove("hidden");
+  }
 });
 
 initSession();
