@@ -6,7 +6,7 @@ from fastapi import Request
 from slowapi.util import get_remote_address
 
 from .database import get_db
-from .models import ChatSession, ChatMessage, Company
+from .models import ChatSession, ChatMessage, Company, Lead
 from .schemas import (
     WidgetSessionCreate,
     ChatSessionResponse,
@@ -50,16 +50,7 @@ router = APIRouter(prefix="/widget", tags=["public-widget"])
 
 
 def _check_origin_and_allow(request: Request, response: Response, company: Company):
-    """
-    The widget runs inside an iframe hosted on our own backend, so the
-    browser's native Origin header on these requests is always our own
-    domain, not the site that embedded the widget. The real embedding
-    site is instead sent explicitly as X-Embed-Origin (set by chat.js,
-    sourced from widget.js's window.location.origin — a value page
-    JavaScript cannot forge). We check that value against the company's
-    allowed list. The actual CORS response header still echoes the
-    real browser Origin, since that's what the browser itself checks.
-    """
+    
     embed_origin = request.headers.get("x-embed-origin")
     allowed = company.allowed_origins or []
     if not embed_origin or embed_origin not in allowed:
@@ -155,13 +146,11 @@ def widget_chat(
 
     _check_origin_and_allow(request, response, company)
 
-    # --- Branch 1: this session is mid lead-capture ---
     if session.awaiting_lead_capture:
         pending = _load_pending_lead(session)
         extracted = extract_lead_info(payload.query)
 
-        # Merge: a freshly-extracted field wins if present, otherwise keep
-        # whatever was already captured in an earlier reply this round.
+
         name = extracted.get("name") or pending["name"]
         email = extracted.get("email") or pending["email"]
         phone = extracted.get("phone") or pending["phone"]
@@ -176,6 +165,15 @@ def widget_chat(
                 question=pending["question"],
                 session_id=str(session.id),
             )
+            lead_row = Lead(
+                company_id=company.id,
+                session_id=session.id,
+                question=pending["question"],
+                name=name,
+                email=email,
+                phone=phone,
+            )
+            db.add(lead_row)
             session.awaiting_lead_capture = False
             session.pending_lead_query = None
             session.lead_capture_attempts = 0
@@ -188,7 +186,6 @@ def widget_chat(
 
             return WidgetChatResponse(session_id=payload.session_id, answer=LEAD_CAPTURE_THANK_YOU)
 
-        # Incomplete — persist whatever we got, then decide: ask again or give up.
         session.lead_capture_attempts += 1
 
         if session.lead_capture_attempts >= MAX_LEAD_CAPTURE_ATTEMPTS:

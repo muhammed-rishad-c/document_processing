@@ -66,5 +66,20 @@ class Company(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # THIS WAS MISSING - Required by ChatSession.company's back_populates
     chat_sessions = relationship("ChatSession", back_populates="company", cascade="all, delete-orphan")
+    leads = relationship("Lead", back_populates="company", cascade="all, delete-orphan")
+    
+    
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="SET NULL"), nullable=True)
+    question = Column(Text, nullable=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    phone = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    company = relationship("Company", back_populates="leads")
