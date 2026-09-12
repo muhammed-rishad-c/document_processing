@@ -6,15 +6,16 @@ from fastapi import Request
 from slowapi.util import get_remote_address
 
 from .database import get_db
-from .models import ChatSession, ChatMessage, Company, Lead
+from .models import ChatSession, ChatMessage, Company, Lead, CompanyDepartment
 from .schemas import (
     WidgetSessionCreate,
     ChatSessionResponse,
     WidgetChatRequest,
     WidgetChatResponse,
 )
-from .llm_service import generate_rag_answer_with_memory, extract_lead_info, NO_ANSWER_TEXT
+from .llm_service import generate_rag_answer_with_memory, extract_lead_info, classify_query, NO_ANSWER_TEXT
 from .lead_export import append_lead
+from .email_service import send_lead_notification
 from .vector_store import search_similar_chunks
 from .rate_limit import limiter, key_func_by_api_key, key_func_by_session_id
 
@@ -76,10 +77,13 @@ def get_company_from_api_key(
 
 def _load_pending_lead(session: ChatSession) -> dict:
     """Parses the JSON blob stored in pending_lead_query into
-    {"question", "name", "email", "phone"}. Never raises — falls back to an
-    empty shell if the field is missing or somehow malformed, so a bad/old
-    value can't crash the request."""
-    empty = {"question": "", "name": None, "email": None, "phone": None}
+    {"question", "category_name", "name", "email", "phone"}. Never raises —
+    falls back to an empty shell if the field is missing or somehow
+    malformed, so a bad/old value can't crash the request. category_name
+    defaults to None for old-shape blobs saved before this field existed;
+    it gets resolved to the company's default department at Lead-creation
+    time, not here."""
+    empty = {"question": "", "category_name": None, "name": None, "email": None, "phone": None}
     if not session.pending_lead_query:
         return empty
     try:
@@ -88,6 +92,7 @@ def _load_pending_lead(session: ChatSession) -> dict:
             return empty
         return {
             "question": data.get("question", ""),
+            "category_name": data.get("category_name"),
             "name": data.get("name"),
             "email": data.get("email"),
             "phone": data.get("phone"),
@@ -96,10 +101,39 @@ def _load_pending_lead(session: ChatSession) -> dict:
         return empty
 
 
-def _save_pending_lead(session: ChatSession, question: str, name, email, phone) -> None:
+def _save_pending_lead(session: ChatSession, question: str, category_name, name, email, phone) -> None:
     session.pending_lead_query = json.dumps(
-        {"question": question, "name": name, "email": email, "phone": phone}
+        {"question": question, "category_name": category_name, "name": name, "email": email, "phone": phone}
     )
+    
+def _get_active_departments(db: Session, company_id) -> list[CompanyDepartment]:
+    return (
+        db.query(CompanyDepartment)
+        .filter(CompanyDepartment.company_id == company_id, CompanyDepartment.is_active.is_(True))
+        .all()
+    )
+
+
+def _resolve_department(db: Session, company: Company, category_name: str | None):
+    """Resolves a classified category name to a real, active department for
+    this company. Falls back to the company's default department if
+    category_name is None or doesn't match any active department —
+    guarantees a lead is never left without a deliverable destination.
+    Note: v1 has no standalone department update/deactivate endpoints
+    (create-with-company only), so is_active can't change post-creation yet —
+    a default with is_active=False can't currently occur."""
+    departments = _get_active_departments(db, company.id)
+
+    if category_name:
+        for dept in departments:
+            if dept.name.lower() == category_name.lower():
+                return dept.id, dept.name
+
+    default_dept = next((d for d in departments if d.is_default), None)
+    if default_dept:
+        return default_dept.id, default_dept.name
+
+    return None, None
 
 
 @router.post("/session", response_model=ChatSessionResponse, status_code=201)
@@ -156,6 +190,8 @@ def widget_chat(
         phone = extracted.get("phone") or pending["phone"]
 
         if name and email:
+            department_id, resolved_category_name = _resolve_department(db, company, pending["category_name"])
+
             append_lead(
                 company_id=str(company.id),
                 company_name=company.name,
@@ -172,6 +208,8 @@ def widget_chat(
                 name=name,
                 email=email,
                 phone=phone,
+                department_id=department_id,
+                category_name=resolved_category_name,
             )
             db.add(lead_row)
             session.awaiting_lead_capture = False
@@ -183,6 +221,21 @@ def widget_chat(
             assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=LEAD_CAPTURE_THANK_YOU)
             db.add_all([user_msg, assistant_msg])
             db.commit()
+            db.refresh(lead_row)
+
+            department_email = next(
+                (d.email for d in _get_active_departments(db, company.id) if d.id == department_id),
+                None,
+            )
+            try:
+                sent = send_lead_notification(company, lead_row, department_email)
+                if sent:
+                    lead_row.email_sent = True
+                    db.add(lead_row)
+                    db.commit()
+            except Exception as e:
+                
+                print(f"[widget_chat] Unexpected error during lead notification: {e}")
 
             return WidgetChatResponse(session_id=payload.session_id, answer=LEAD_CAPTURE_THANK_YOU)
 
@@ -201,7 +254,7 @@ def widget_chat(
 
             return WidgetChatResponse(session_id=payload.session_id, answer=LEAD_CAPTURE_GIVE_UP)
         else:
-            _save_pending_lead(session, pending["question"], name, email, phone)
+            _save_pending_lead(session, pending["question"], pending["category_name"], name, email, phone)
             db.add(session)
 
             if not name and not email:
@@ -250,9 +303,12 @@ def widget_chat(
     # The ONLY detection point for lead capture, anywhere in the app.
     # Exact match against one constant — no substring/keyword checks.
     if answer_text == NO_ANSWER_TEXT:
+        active_departments = _get_active_departments(db, company.id)
+        category_name = classify_query(payload.query, [d.name for d in active_departments])
+
         session.awaiting_lead_capture = True
         session.lead_capture_attempts = 0
-        _save_pending_lead(session, payload.query, None, None, None)
+        _save_pending_lead(session, payload.query, category_name, None, None, None)
         db.add(session)
         answer_text = LEAD_CAPTURE_PROMPT
 

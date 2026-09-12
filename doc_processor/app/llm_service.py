@@ -132,6 +132,17 @@ EXTRACTION_PROMPT = (
     "Message: {message}"
 )
 
+CLASSIFICATION_PROMPT = (
+    "Classify the visitor's question below into exactly one of these department names, "
+    "or null if none clearly fit or the question is general:\n"
+    "{department_list}\n\n"
+    "Respond with ONLY a JSON object, no other text, no markdown fences, "
+    'in exactly this shape: {{"category": null or "<one of the exact names above>"}}. '
+    "Only return a name if it is a genuine match from the list above. "
+    "Do not invent a new name. If uncertain, return null.\n\n"
+    "Question: {query}"
+)
+
 def generate_rag_answer_with_memory(
     user_query: str,
     retrieved_chunks: list[dict],
@@ -246,11 +257,7 @@ def generate_rag_answer_with_memory(
 
 
 def extract_lead_info(message: str) -> dict:
-    """Best-effort extraction of name/email/phone from a free-text visitor reply.
-    Never raises — always returns a dict with the three keys, using None for
-    anything it couldn't confidently find. LLM does name extraction (no
-    reliable regex for that); email/phone are validated/recovered with regex
-    since those have unambiguous formats."""
+    
     result = {"name": None, "email": None, "phone": None}
 
     try:
@@ -278,3 +285,31 @@ def extract_lead_info(message: str) -> dict:
         result["name"] = result["name"].strip() or None
 
     return result
+
+def classify_query(query: str, department_names: list[str]) -> str | None:
+    
+    if not department_names:
+        return None
+
+    department_list = "\n".join(f"- {name}" for name in department_names)
+
+    try:
+        ai_message = llm.invoke(
+            CLASSIFICATION_PROMPT.format(department_list=department_list, query=query)
+        )
+        raw = ai_message.content.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = _json.loads(raw)
+
+        if isinstance(parsed, dict):
+            category = parsed.get("category")
+            if isinstance(category, str):
+                category = category.strip()
+                for name in department_names:
+                    if name.lower() == category.lower():
+                        return name
+
+        return None
+    except Exception as e:
+        print(f"[classify_query] LLM classification failed, defaulting to None: {e}")
+        return None

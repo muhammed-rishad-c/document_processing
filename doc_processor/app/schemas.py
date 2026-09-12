@@ -1,7 +1,8 @@
 
+import re
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel,ConfigDict,Field
+from pydantic import BaseModel,ConfigDict,Field,field_validator,model_validator
 from typing import List,Dict,Any,Optional
 
 class DocumentStats(BaseModel):
@@ -145,11 +146,73 @@ class WidgetChatResponse(BaseModel):
     session_id: UUID
     answer: str
     
+EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+
+class DepartmentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=1, max_length=50)
+    email: str
+    is_default: bool = False
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Department name cannot be blank.")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not EMAIL_RE.match(v.strip()):
+            raise ValueError("Invalid email address.")
+        return v.strip()
+
+
+class DepartmentResponse(BaseModel):
+    id: UUID
+    name: str
+    email: str
+    is_default: bool
+    is_active: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+    
+class DepartmentsAddRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    departments: List[DepartmentCreate] = Field(..., min_length=1)
+
+    @field_validator("departments")
+    @classmethod
+    def unique_names(cls, v: List[DepartmentCreate]) -> List[DepartmentCreate]:
+        seen = {d.name.lower() for d in v}
+        if len(seen) != len(v):
+            raise ValueError("Department names must be unique in this request.")
+        return v
+    
 class CompanyCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
     document_id: UUID
     allowed_origins: List[str]
+    departments: List[DepartmentCreate] = Field(..., min_length=1, max_length=10)
+
+    @field_validator("departments")
+    @classmethod
+    def unique_names(cls, v: List[DepartmentCreate]) -> List[DepartmentCreate]:
+        seen = {d.name.lower() for d in v}
+        if len(seen) != len(v):
+            raise ValueError("Department names must be unique per company.")
+        return v
+
+    @model_validator(mode="after")
+    def exactly_one_default(self) -> "CompanyCreate":
+        defaults = [d for d in self.departments if d.is_default]
+        if len(defaults) != 1:
+            raise ValueError("Exactly one department must have is_default=True.")
+        return self
 
 
 class CompanyResponse(BaseModel):
@@ -160,5 +223,6 @@ class CompanyResponse(BaseModel):
     allowed_origins: List[str]
     is_active: bool
     created_at: datetime
+    departments: List[DepartmentResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

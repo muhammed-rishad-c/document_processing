@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, String, Text, Integer, ForeignKey, Boolean
+from sqlalchemy import Column, DateTime, String, Text, Integer, ForeignKey, Boolean, Index
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -68,8 +68,40 @@ class Company(Base):
 
     chat_sessions = relationship("ChatSession", back_populates="company", cascade="all, delete-orphan")
     leads = relationship("Lead", back_populates="company", cascade="all, delete-orphan")
-    
-    
+    departments = relationship("CompanyDepartment", back_populates="company", cascade="all, delete-orphan")
+
+
+class CompanyDepartment(Base):
+
+    __tablename__ = "company_departments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    is_default = Column(Boolean, nullable=False, default=False, server_default="false")
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    company = relationship("Company", back_populates="departments")
+    leads = relationship("Lead", back_populates="department")
+
+    __table_args__ = (
+        Index(
+            "uq_company_departments_one_default",
+            "company_id",
+            unique=True,
+            postgresql_where=(is_default == True),  
+        ),
+        Index(
+            "uq_company_departments_name_per_company",
+            "company_id",
+            "name",
+            unique=True,
+        ),
+    )
+
+
 class Lead(Base):
     __tablename__ = "leads"
 
@@ -82,4 +114,14 @@ class Lead(Base):
     phone = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+    # --- Added for query classification + department email routing ---
+    department_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("company_departments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    category_name = Column(Text, nullable=True)  # snapshot of department name at classification time
+    email_sent = Column(Boolean, nullable=False, default=False, server_default="false")
+
     company = relationship("Company", back_populates="leads")
+    department = relationship("CompanyDepartment", back_populates="leads")

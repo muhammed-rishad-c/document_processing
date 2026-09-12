@@ -86,7 +86,7 @@ ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
-]
+] 
 
 app.add_middleware(
     ConditionalCORSMiddleware,
