@@ -143,6 +143,28 @@ CLASSIFICATION_PROMPT = (
     "Question: {query}"
 )
 
+STANDALONE_QUERY_PROMPT = (
+    "Below is a conversation between a visitor and a support chatbot, followed by the "
+    "visitor's latest message.\n\n"
+    "Determine whether the latest message is already a standalone question (fully "
+    "understandable on its own, with no missing subject/context) or a follow-up that "
+    "depends on the prior conversation to make sense (e.g. it uses pronouns or vague "
+    "references like 'it', 'that', 'those', 'these services', 'this feature', or omits a "
+    "subject discussed earlier).\n\n"
+    "If it is already standalone, return it unchanged (do not paraphrase or reword it). "
+    "If it is a follow-up, rewrite it as a single standalone question that REPLACES every "
+    "vague pronoun or reference with the specific subject, feature, product, or service "
+    "name it refers to, taken from the conversation above. Name the actual thing being "
+    "discussed explicitly — do not leave words like 'these services' or 'that' in the "
+    "rewritten question. Do not add any information that isn't present in the conversation "
+    "or the message itself, and do not list out every sub-detail — just name the subject "
+    "clearly enough that the question is fully understandable on its own.\n\n"
+    "Respond with ONLY a JSON object, no other text, no markdown fences, "
+    'in exactly this shape: {{"standalone_query": "<string>"}}.\n\n'
+    "--- CONVERSATION ---\n{conversation}\n\n"
+    "--- LATEST MESSAGE ---\n{query}"
+)
+
 def generate_rag_answer_with_memory(
     user_query: str,
     retrieved_chunks: list[dict],
@@ -285,6 +307,45 @@ def extract_lead_info(message: str) -> dict:
         result["name"] = result["name"].strip() or None
 
     return result
+
+def resolve_standalone_query(query: str, chat_history: list[dict] | None = None) -> str:
+    """Resolves a possibly context-dependent visitor message into a standalone
+    question, using recent chat history. Used only on the NO_ANSWER_TEXT
+    fallback path (see widget.py) — never touches ChatMessage storage, and
+    never raises. On empty history there is nothing to resolve against, so
+    the LLM call is skipped and the raw query is returned unchanged. On any
+    LLM/parsing failure, falls back to the raw query, exactly like
+    extract_lead_info / classify_query do."""
+    if not chat_history:
+        return query
+
+    recent_history = chat_history[-6:]
+    conversation_lines = []
+    for msg in recent_history:
+        role_label = "User" if msg.get("role") == "user" else "Assistant"
+        conversation_lines.append(f"{role_label}: {msg.get('content', '')}")
+    conversation = "\n".join(conversation_lines)
+
+    if not conversation.strip():
+        return query
+
+    try:
+        ai_message = llm.invoke(
+            STANDALONE_QUERY_PROMPT.format(conversation=conversation, query=query)
+        )
+        raw = ai_message.content.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = _json.loads(raw)
+
+        if isinstance(parsed, dict):
+            standalone_query = parsed.get("standalone_query")
+            if isinstance(standalone_query, str) and standalone_query.strip():
+                return standalone_query.strip()
+
+        return query
+    except Exception as e:
+        print(f"[resolve_standalone_query] LLM resolution failed, falling back to raw query: {e}")
+        return query
 
 def classify_query(query: str, department_names: list[str]) -> str | None:
     

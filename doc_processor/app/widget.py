@@ -13,7 +13,12 @@ from .schemas import (
     WidgetChatRequest,
     WidgetChatResponse,
 )
-from .llm_service import generate_rag_answer_with_memory, extract_lead_info, classify_query, NO_ANSWER_TEXT
+from .llm_service import (
+    generate_rag_answer_with_memory,
+    extract_lead_info, classify_query,
+    resolve_standalone_query, 
+    NO_ANSWER_TEXT
+    ) 
 from .lead_export import append_lead
 from .email_service import send_lead_notification
 from .vector_store import search_similar_chunks
@@ -77,21 +82,33 @@ def get_company_from_api_key(
 
 def _load_pending_lead(session: ChatSession) -> dict:
     """Parses the JSON blob stored in pending_lead_query into
-    {"question", "category_name", "name", "email", "phone"}. Never raises —
-    falls back to an empty shell if the field is missing or somehow
-    malformed, so a bad/old value can't crash the request. category_name
-    defaults to None for old-shape blobs saved before this field existed;
-    it gets resolved to the company's default department at Lead-creation
-    time, not here."""
-    empty = {"question": "", "category_name": None, "name": None, "email": None, "phone": None}
+    {"question", "resolved_question", "category_name", "name", "email", "phone"}.
+    Never raises — falls back to an empty shell if the field is missing or
+    somehow malformed, so a bad/old value can't crash the request.
+    category_name defaults to None for old-shape blobs saved before this
+    field existed; it gets resolved to the company's default department at
+    Lead-creation time, not here. resolved_question falls back to the raw
+    "question" value for blobs saved before this field existed, so an
+    in-flight session that straddles this deploy never surfaces None to
+    Excel/DB/email."""
+    empty = {
+        "question": "",
+        "resolved_question": "",
+        "category_name": None,
+        "name": None,
+        "email": None,
+        "phone": None,
+    }
     if not session.pending_lead_query:
         return empty
     try:
         data = json.loads(session.pending_lead_query)
         if not isinstance(data, dict):
             return empty
+        raw_question = data.get("question", "")
         return {
-            "question": data.get("question", ""),
+            "question": raw_question,
+            "resolved_question": data.get("resolved_question") or raw_question,
             "category_name": data.get("category_name"),
             "name": data.get("name"),
             "email": data.get("email"),
@@ -101,9 +118,16 @@ def _load_pending_lead(session: ChatSession) -> dict:
         return empty
 
 
-def _save_pending_lead(session: ChatSession, question: str, category_name, name, email, phone) -> None:
+def _save_pending_lead(session: ChatSession, question: str, resolved_question: str, category_name, name, email, phone) -> None:
     session.pending_lead_query = json.dumps(
-        {"question": question, "category_name": category_name, "name": name, "email": email, "phone": phone}
+        {
+            "question": question,
+            "resolved_question": resolved_question,
+            "category_name": category_name,
+            "name": name,
+            "email": email,
+            "phone": phone,
+        }
     )
     
 def _get_active_departments(db: Session, company_id) -> list[CompanyDepartment]:
@@ -198,13 +222,13 @@ def widget_chat(
                 name=name,
                 email=email,
                 phone=phone,
-                question=pending["question"],
+                question=pending["resolved_question"],
                 session_id=str(session.id),
             )
             lead_row = Lead(
                 company_id=company.id,
                 session_id=session.id,
-                question=pending["question"],
+                question=pending["resolved_question"],
                 name=name,
                 email=email,
                 phone=phone,
@@ -254,7 +278,9 @@ def widget_chat(
 
             return WidgetChatResponse(session_id=payload.session_id, answer=LEAD_CAPTURE_GIVE_UP)
         else:
-            _save_pending_lead(session, pending["question"], pending["category_name"], name, email, phone)
+            _save_pending_lead(
+                session, pending["question"], pending["resolved_question"], pending["category_name"], name, email, phone
+            )
             db.add(session)
 
             if not name and not email:
@@ -271,7 +297,7 @@ def widget_chat(
 
             return WidgetChatResponse(session_id=payload.session_id, answer=reprompt_text)
 
-    # --- Branch 2: normal flow ---
+    
     all_messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == payload.session_id)
@@ -300,15 +326,16 @@ def widget_chat(
 
     answer_text = llm_result["text"]
 
-    # The ONLY detection point for lead capture, anywhere in the app.
-    # Exact match against one constant — no substring/keyword checks.
+    
     if answer_text == NO_ANSWER_TEXT:
+        resolved_query = resolve_standalone_query(payload.query, history_payload)
+
         active_departments = _get_active_departments(db, company.id)
-        category_name = classify_query(payload.query, [d.name for d in active_departments])
+        category_name = classify_query(resolved_query, [d.name for d in active_departments])
 
         session.awaiting_lead_capture = True
         session.lead_capture_attempts = 0
-        _save_pending_lead(session, payload.query, category_name, None, None, None)
+        _save_pending_lead(session, payload.query, resolved_query, category_name, None, None, None)
         db.add(session)
         answer_text = LEAD_CAPTURE_PROMPT
 
