@@ -2,6 +2,7 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.header import Header
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -22,8 +23,9 @@ def _build_message(company: Company, lead: Lead, department_email: str) -> MIMEM
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     category_display = lead.category_name or "General"
 
+    subject_text = f"New lead for {company.name} — {category_display}"
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"New lead for {company.name} — {category_display}"
+    msg["Subject"] = Header(subject_text, "utf-8")
     msg["From"] = SMTP_FROM_ADDRESS
     msg["To"] = department_email
 
