@@ -16,6 +16,7 @@ A FastAPI-based Retrieval-Augmented Generation (RAG) chatbot: upload a document,
 | PDF/text extraction | `pymupdf` (PDFs), raw UTF-8 decode (`.txt`) |
 | LLM | OpenRouter, model `openrouter/free` (auto-routed across community-hosted models), temperature=0.3 |
 | Async task queue (optional) | RQ + Redis, with automatic fallback to FastAPI `BackgroundTasks` if Redis is unavailable |
+| Email delivery | `smtplib` + `email.mime` (Python stdlib, no new dependency) — SMTP with STARTTLS by default; dev/test uses a Mailtrap sandbox inbox, never a real mailbox |
 
 ---
 
@@ -27,14 +28,19 @@ doc_processor/
 │   ├── main.py                  # FastAPI app, routes, analytics middleware
 │   ├── service.py                # text extraction, doc stats, tiktoken-based chunking
 │   ├── vector_store.py            # Qdrant init/upsert/search, embedding calls
-│   ├── llm_service.py             # RAG answer generation, context building, token usage
+│   ├── llm_service.py             # RAG answer generation, extract_lead_info(), classify_query(), context building, token usage
 │   ├── analytics.py               # request logging, /analytics aggregation
+│   ├── widget.py                  # public widget API: /widget/session, /widget/chat — RAG flow + lead-capture + department classification
+│   ├── internal.py                # admin-only API (shared-secret auth): create/list companies, add departments, download leads
+│   ├── email_service.py           # SMTP lead-notification email, sent to the resolved department address
+│   ├── lead_export.py             # per-company Excel lead export (append_lead())
+│   ├── rate_limit.py               # slowapi limiter, keyed by API key / session id / IP
 │   ├── models.py / schemas.py / database.py
 │   ├── analytics_log.jsonl        # append-only request/token/timing log
 │   └── token_vectors/             # per-document token+vector CSV exports
 │
 └── eval/
-    ├── eval_dataset.json          # 25-question evaluation set (see §3)
+    ├── eval_dataset.json          # 25-question evaluation set (see §4)
     ├── answer_evaluation.py       # Task 3+4: answer quality + hallucination scoring
     ├── chunk_size_experiment.py   # Task 5: chunk-size sweep
     ├── topk_experiment.py         # Task 6: top-k sweep
@@ -43,7 +49,38 @@ doc_processor/
 
 ---
 
-## 3. Evaluation Methodology
+## 3. Widget Lead Capture & Dynamic Department Email Routing
+
+When the chatbot can't answer a visitor's question (RAG returns `NO_ANSWER_TEXT`), it captures the visitor as a lead and routes a notification email to the correct company department automatically — instead of every unanswered question going to one inbox.
+
+**Company-defined departments, not a fixed category list.** Each `Company` owns a set of `CompanyDepartment` rows (name, email, `is_default`, `is_active` — max 10 per company, admin-created). Exactly one department per company must be marked default, enforced by a partial unique DB index (`uq_company_departments_one_default`) — not just application code — so a company can never end up with zero or multiple defaults. This guarantees a captured lead always has somewhere to go, even if classification fails or is ambiguous.
+
+**Flow, end to end:**
+
+1. RAG fails → exact-match on `NO_ANSWER_TEXT` (the only detection point anywhere in the app) triggers lead capture, same as before this feature existed.
+2. At that exact moment, `classify_query()` (new, in `llm_service.py`) asks the LLM to match the visitor's original question against this company's own active department names — returning one of those exact names, or `None` if nothing clearly fits. The raw LLM output is never trusted directly: it's matched case-insensitively against the real department list before being accepted.
+3. The classified name rides along in the same pending-lead JSON blob (`session.pending_lead_query`) that already tracks the visitor's in-progress name/email/phone, so it survives across multiple back-and-forth turns without reclassifying.
+4. Once name + email are both captured, `_resolve_department()` (new, in `widget.py`) does the final lookup: exact department match if one exists and is still active, otherwise the company's default department. Both the resolved `department_id` (FK) and `category_name` (plain-text snapshot) are stored on the `Lead` row — the snapshot keeps historical leads readable even if a department is later renamed or removed.
+5. `send_lead_notification()` (new, `email_service.py`, stdlib `smtplib` — no new dependency) emails the lead's details to the resolved department's address. This runs synchronously, right after the `Lead` row is already committed to the DB, and is wrapped so an SMTP failure can never break the visitor's chat response — the visitor gets the same "thanks, we'll be in touch" message either way. Success/failure is tracked via `Lead.email_sent`, ready for a future retry mechanism.
+
+**Admin endpoints** (`internal.py`, same `X-Internal-Secret` shared-secret auth as the rest of the admin API):
+
+| Route | Purpose |
+|---|---|
+| `POST /internal/companies` | Create a company + its initial departments atomically (at least 1, exactly one default, required — no company can be created without a deliverable destination) |
+| `GET /internal/companies` | List all companies with their nested departments |
+| `POST /internal/companies/{company_id}/departments` | Add departments to a company that has none yet (scoped narrowly — refuses to add a second default onto a company that already has one) |
+
+**What this feature does *not* touch:** `NO_ANSWER_TEXT` detection, the visitor-facing lead-capture messages/state machine, `append_lead()`/Excel export, rate limiting, origin/tenant isolation — all unchanged from the pre-existing behavior documented implicitly throughout this README's RAG-focused sections below.
+
+**Known gaps, honestly flagged:**
+- Standalone department *edit*/*deactivate* endpoints don't exist yet — v1 only supports creating departments (at company-creation or via the add-departments endpoint above). Changing an existing default is deliberately unsupported for now.
+- No automatic retry for a failed email send — `Lead.email_sent = False` is the signal, but nothing currently acts on it. Flagged in the original feature plan as a later "decoupled trigger" hardening step.
+- `lead_export.py`'s Excel export does not yet include a `category` column — the DB (`Lead.category_name`) has it, the spreadsheet doesn't.
+
+---
+
+## 4. Evaluation Methodology
 
 **Corpus:** `the-metamorphosis-franz-kafka-10258.pdf` (single document).
 
@@ -67,7 +104,7 @@ Each entry has a `question`, `expected_answer`, and `expected_sources` (resolved
 
 ---
 
-## 4. Retrieval Results (Task 2)
+## 5. Retrieval Results (Task 2)
 
 **Top-1 / Top-3 document-level retrieval accuracy: 100% in every configuration ever tested** — all three chunk sizes, all four top-k values, across multiple independent runs.
 
@@ -75,7 +112,7 @@ Each entry has a `question`, `expected_answer`, and `expected_sources` (resolved
 
 ---
 
-## 5. Answer Evaluation & Hallucination Testing (Tasks 3–4)
+## 6. Answer Evaluation & Hallucination Testing (Tasks 3–4)
 
 Latest full run (25 questions):
 
@@ -92,7 +129,7 @@ Latest full run (25 questions):
 
 ---
 
-## 6. Chunking Experiment (Task 5)
+## 7. Chunking Experiment (Task 5)
 
 Fixed `top_k=5`, `chunk_overlap=50`. Tested across three independent runs over the project's lifetime:
 
@@ -106,13 +143,13 @@ Fixed `top_k=5`, `chunk_overlap=50`. Tested across three independent runs over t
 
 **500 tokens wins consistently across every run, with the ranking never flipping.** Why:
 - **300 tokens underperforms:** too short to hold a complete scene for multi-chunk/cross-section questions — the model gets fragments and has to guess at connective narrative.
-- **800 tokens underperforms:** a longer chunk often blends multiple unrelated topics into one embedding, diluting semantic focus even though document-level retrieval still succeeds trivially (see §4's ceiling-effect caveat).
+- **800 tokens underperforms:** a longer chunk often blends multiple unrelated topics into one embedding, diluting semantic focus even though document-level retrieval still succeeds trivially (see §5's ceiling-effect caveat).
 
 **Decision: `chunk_size = 500`, `chunk_overlap = 50`.** Confidence: high (3 independent confirming runs).
 
 ---
 
-## 7. Top-K Experiment (Task 6)
+## 8. Top-K Experiment (Task 6)
 
 Fixed `chunk_size`, swept `top_k`:
 
@@ -126,7 +163,7 @@ Fixed `chunk_size`, swept `top_k`:
 | 10 | 62.08% – 63.47% | 6982 – 9349 |
 
 ² The wide spread on `top_k=1` across repeated runs of the *same* configuration is LLM-side sampling/routing variance (`openrouter/free` auto-routes across different community models per call, at temperature=0.3), not a retrieval or chunking effect — retrieval accuracy stayed at 100% in both runs.
-³ A narrower follow-up sweep (top_k 4/5/6/7) around the original winner. `top_k=6` scored highest in that single run, but on only one run versus `top_k=5`'s multiple confirming runs — see §11 for why `top_k=5` was still chosen.
+³ A narrower follow-up sweep (top_k 4/5/6/7) around the original winner. `top_k=6` scored highest in that single run, but on only one run versus `top_k=5`'s multiple confirming runs — see §12 for why `top_k=5` was still chosen.
 
 **top_k=1 is sharply worse than every other value** — with only one retrieved chunk, multi-chunk questions are structurally unanswerable regardless of retrieval quality. Quality rises through k=3 and k=5, then **flattens**: k=10 buys only ~0.4–2 points over k=5 for roughly +25–30% latency and double the context tokens — a poor trade.
 
@@ -134,7 +171,7 @@ Fixed `chunk_size`, swept `top_k`:
 
 ---
 
-## 8. Token & Cost Tracking (Task 7)
+## 9. Token & Cost Tracking (Task 7)
 
 `GET /analytics` aggregates a per-request JSONL log (`analytics_log.jsonl`) capturing method, path, status code, latency, and — for the two chat endpoints — input/context/output token counts sourced from the LLM provider's own usage accounting (not estimated).
 
@@ -144,7 +181,7 @@ Fixed `chunk_size`, swept `top_k`:
 
 ---
 
-## 9. Performance Analysis (Task 8)
+## 10. Performance Analysis (Task 8)
 
 Per-stage timing, now confirmed across ~300+ real requests (upgraded from the original n=1 preliminary measurement):
 
@@ -157,26 +194,26 @@ Per-stage timing, now confirmed across ~300+ real requests (upgraded from the or
 
 **Bottlenecks identified:**
 - **Query pipeline:** LLM generation time dominates overwhelmingly — a network round-trip to an external API will always dominate local embedding/search computation. **Tail latency is a separate concern from the mean:** several requests measured 13,000–20,000 ms in `llm_generation_ms` alone against a typical range of 3,000–8,000 ms, consistent with free-tier model-routing variability. Report median/p90 alongside the mean, not the mean alone.
-- **Upload pipeline:** embedding chunks one at a time with no batching is the clear cost center. `sentence-transformers` supports batch encoding (`encoder.encode(list_of_texts)`) — this has already been applied in the new token-vector export path (§10) but **is not yet applied to the main chunk-embedding loop in `/documents/upload`** — flagged as a pending optimization, not yet done.
+- **Upload pipeline:** embedding chunks one at a time with no batching is the clear cost center. `sentence-transformers` supports batch encoding (`encoder.encode(list_of_texts)`) — this has already been applied in the new token-vector export path (§11) but **is not yet applied to the main chunk-embedding loop in `/documents/upload`** — flagged as a pending optimization, not yet done.
 
 ---
 
-## 10. Improvements Implemented (Task 9)
+## 11. Improvements Implemented (Task 9)
 
 | # | Problem identified | Change implemented | Why selected | Result |
 |---|---|---|---|---|
 | 1 | Discarded context-token count in `llm_service.py` (`context_str, _ = build_safe_context(...)`) meant real context-token usage was never visible in `/analytics`. | Captured the value instead of discarding it (`context_str, context_tokens = ...`), returned it in the response dict. | Minimal, additive change; unblocks accurate token/cost reporting (Task 7) and removes the need for `topk_experiment.py`'s separate token *estimate*. | `/analytics` now reports real context-token totals, not estimates. |
 | 2 | Overly strict hallucination-refusal detection matched only one exact canned sentence, undercounting genuine refusals phrased differently. | Broadened `REFUSAL_PATTERNS` to a set of equivalent refusal phrases (`"does not specify"`, `"not present in the document"`, etc.). | LLMs don't reliably reproduce an exact canned string even when correctly refusing. | Hallucination avoidance now measured at 100% (3/3) instead of undercounting correct refusals as failures. |
-| 3 | Chunking/retrieval configuration was unvalidated defaults, not evidence-based. | Ran repeated chunk-size (300/500/800) and top-k (1/3/5/6/7/10) sweeps across multiple independent runs; selected `chunk_size=500`, `top_k=5` based on consistent winning performance across replications, not a single run. | Single-run comparisons on this pipeline are noisy (LLM-side sampling + free-tier model auto-routing) — replication was necessary before trusting a config change. | Config finalized with documented confidence levels (see §6–7) rather than an unverified guess. |
+| 3 | Chunking/retrieval configuration was unvalidated defaults, not evidence-based. | Ran repeated chunk-size (300/500/800) and top-k (1/3/5/6/7/10) sweeps across multiple independent runs; selected `chunk_size=500`, `top_k=5` based on consistent winning performance across replications, not a single run. | Single-run comparisons on this pipeline are noisy (LLM-side sampling + free-tier model auto-routing) — replication was necessary before trusting a config change. | Config finalized with documented confidence levels (see §7–8) rather than an unverified guess. |
 | 4 | New per-token CSV export feature (word-level tokenization + embedding audit trail) would require hundreds of embedding calls per chunk if run synchronously inline in `/documents/upload`, risking upload-latency regression. | Implemented as an out-of-band task: batched per-chunk token embedding (`get_embeddings_batch`) instead of one-call-per-token, dispatched via an RQ/Redis queue with automatic fallback to FastAPI `BackgroundTasks` if Redis is unavailable. | Matches the Day 3 spec's own suggested improvement category ("Asynchronous processing"); keeps the export from ever blocking or slowing the main upload response path. | Upload response time is unaffected by the new export feature; export runs in a separate worker process when Redis is available, or as a background task otherwise. |
 
-**Pending, not yet implemented** (documented honestly rather than claimed done): batching the *main* chunk-embedding loop in `/documents/upload` (§9); adding `error_detail` to the analytics log for 500s (§8); a `?since=` filter on `/analytics` to separate eval traffic from real usage (§8).
+**Pending, not yet implemented** (documented honestly rather than claimed done): batching the *main* chunk-embedding loop in `/documents/upload` (§10); adding `error_detail` to the analytics log for 500s (§9); a `?since=` filter on `/analytics` to separate eval traffic from real usage (§9).
 
 ---
 
-## 11. Before vs. After Comparison (Task 10)
+## 12. Before vs. After Comparison (Task 10)
 
-Measured directly from the sweeps in §6–7 (isolated single-variable comparisons, not a combined grid search — see caveat below):
+Measured directly from the sweeps in §7–8 (isolated single-variable comparisons, not a combined grid search — see caveat below):
 
 **Chunk size (at fixed top_k=5):**
 
@@ -194,16 +231,16 @@ Measured directly from the sweeps in §6–7 (isolated single-variable compariso
 | Retrieval accuracy | 100%* | 100%* |
 | Latency | 5612–6756 ms | 5749–7326 ms |
 
-\* See §4 — retrieval accuracy is unchanged because it's ceiling-effected by the single-document corpus, not because the tuning had no retrieval impact.
+\* See §5 — retrieval accuracy is unchanged because it's ceiling-effected by the single-document corpus, not because the tuning had no retrieval impact.
 
 **Caveat:** chunk_size and top_k were swept independently, one variable at a time, per the Day 3 spec's own methodology (to avoid confounding which variable caused a change). A single confirming run of the *combined* recommended-adjacent config (`chunk_size=400, top_k=6`) was also tested and landed within the same noise band as the chosen `500/5` config (~61.6% vs. ~60.8% average) — not a clear win, and under-replicated relative to `500/5`'s three confirming runs, so `500/5` was kept as the shipped configuration. A full joint grid search across both variables together was not performed and is listed as a next step below.
 
 ---
 
-## 12. Known Limitations & Next Steps
+## 13. Known Limitations & Next Steps
 
 - **Retrieval accuracy is not a discriminating metric on this corpus.** A multi-document corpus would be needed to meaningfully evaluate retrieval quality independent of answer quality.
 - **LLM-side non-determinism** (`openrouter/free`'s multi-model auto-routing + temperature=0.3) means identical configurations produce different absolute scores run-to-run (observed spread: ~±3–7 points on cosine similarity). Rankings between configurations have held stable across repeated runs; absolute percentages should not be over-trusted from a single run.
 - **A joint chunk_size × top_k grid search** has not been performed — only one-at-a-time sweeps, plus a single spot-check of one promising combination.
-- **~1–2% request failure rate (HTTP 500)** observed on `/documents/chat` under sustained sweep load, with no captured error detail (see §8, §10 pending items).
+- **~1–2% request failure rate (HTTP 500)** observed on `/documents/chat` under sustained sweep load, with no captured error detail (see §9, §11 pending items).
 - **Main upload chunk-embedding loop remains unbatched** — the batching pattern proven out in the new token-vector export path has not yet been backported to the primary upload flow.
