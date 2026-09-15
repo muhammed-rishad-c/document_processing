@@ -17,8 +17,9 @@ from .llm_service import (
     generate_rag_answer_with_memory,
     extract_lead_info, classify_query,
     resolve_standalone_query, 
+    is_diverted_question,
     NO_ANSWER_TEXT
-    ) 
+    )
 from .lead_export import append_lead
 from .email_service import send_lead_notification
 from .vector_store import search_similar_chunks
@@ -159,6 +160,59 @@ def _resolve_department(db: Session, company: Company, category_name: str | None
 
     return None, None
 
+def _answer_with_rag(
+    db: Session,
+    session: ChatSession,
+    company: Company,
+    payload: WidgetChatRequest,
+) -> WidgetChatResponse:
+    all_messages = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == payload.session_id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
+
+    retrieved_chunks = search_similar_chunks(
+        query_text=payload.query,
+        top_k=5,
+        document_id=str(company.document_id),
+    )
+
+    try:
+        llm_result = generate_rag_answer_with_memory(
+            user_query=payload.query,
+            retrieved_chunks=retrieved_chunks,
+            chat_history=history_payload,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="The assistant is temporarily unavailable. Please try again shortly.",
+        )
+
+    answer_text = llm_result["text"]
+
+    if answer_text == NO_ANSWER_TEXT:
+        resolved_query = resolve_standalone_query(payload.query, history_payload)
+
+        active_departments = _get_active_departments(db, company.id)
+        category_name = classify_query(resolved_query, [d.name for d in active_departments])
+
+        session.awaiting_lead_capture = True
+        session.lead_capture_attempts = 0
+        _save_pending_lead(session, payload.query, resolved_query, category_name, None, None, None)
+        db.add(session)
+        answer_text = LEAD_CAPTURE_PROMPT
+
+    user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+    assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
+    db.add_all([user_msg, assistant_msg])
+    db.commit()
+
+    return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
+
 
 @router.post("/session", response_model=ChatSessionResponse, status_code=201)
 @limiter.limit("20/minute", key_func=key_func_by_api_key)
@@ -208,6 +262,12 @@ def widget_chat(
         pending = _load_pending_lead(session)
         extracted = extract_lead_info(payload.query)
 
+        if is_diverted_question(payload.query, extracted):
+            session.awaiting_lead_capture = False
+            session.pending_lead_query = None
+            session.lead_capture_attempts = 0
+            db.add(session)
+            return _answer_with_rag(db, session, company, payload)
 
         name = extracted.get("name") or pending["name"]
         email = extracted.get("email") or pending["email"]
@@ -298,50 +358,4 @@ def widget_chat(
             return WidgetChatResponse(session_id=payload.session_id, answer=reprompt_text)
 
     
-    all_messages = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.session_id == payload.session_id)
-        .order_by(ChatMessage.created_at.asc())
-        .all()
-    )
-    history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
-
-    retrieved_chunks = search_similar_chunks(
-        query_text=payload.query,
-        top_k=5,
-        document_id=str(company.document_id),
-    )
-
-    try:
-        llm_result = generate_rag_answer_with_memory(
-            user_query=payload.query,
-            retrieved_chunks=retrieved_chunks,
-            chat_history=history_payload,
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=503,
-            detail="The assistant is temporarily unavailable. Please try again shortly.",
-        )
-
-    answer_text = llm_result["text"]
-
-    
-    if answer_text == NO_ANSWER_TEXT:
-        resolved_query = resolve_standalone_query(payload.query, history_payload)
-
-        active_departments = _get_active_departments(db, company.id)
-        category_name = classify_query(resolved_query, [d.name for d in active_departments])
-
-        session.awaiting_lead_capture = True
-        session.lead_capture_attempts = 0
-        _save_pending_lead(session, payload.query, resolved_query, category_name, None, None, None)
-        db.add(session)
-        answer_text = LEAD_CAPTURE_PROMPT
-
-    user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
-    assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
-    db.add_all([user_msg, assistant_msg])
-    db.commit()
-
-    return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
+    return _answer_with_rag(db, session, company, payload)

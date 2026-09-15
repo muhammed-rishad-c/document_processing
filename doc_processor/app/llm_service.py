@@ -143,6 +143,13 @@ LEAD_IN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+WH_WORDS = ("what", "how", "when", "where", "why", "which", "who")
+REQUEST_TERMS = (
+    "can you", "could you", "do you", "does it", "is it", "are you",
+    "tell me", "explain", "show me", "help with", "reset", "cancel",
+    "change", "update", "fix", "support", "pricing", "cost", "price", "refund",
+)
+
 EXTRACTION_PROMPT = (
     "Extract the visitor's contact details from the message below. "
     "Respond with ONLY a JSON object, no other text, no markdown fences, "
@@ -185,6 +192,60 @@ STANDALONE_QUERY_PROMPT = (
     "--- CONVERSATION ---\n{conversation}\n\n"
     "--- LATEST MESSAGE ---\n{query}"
 )
+
+CLASSIFY_LEAD_REPLY_PROMPT = (
+    "The visitor was asked for their name and email. Decide if the message "
+    "below is trying to provide that (name/email/phone), or is a different "
+    "question/request unrelated to giving contact info.\n"
+    "Respond with ONLY a JSON object, no other text, no markdown fences, "
+    'in exactly this shape: {{"intent": "contact_info" or "new_question"}}.\n\n'
+    "Message: {message}"
+)
+
+
+def looks_like_new_question(message: str) -> bool | None:
+    """Heuristic, no LLM call. True = clearly a question/request.
+    False = clearly a contact-info reply or filler. None = ambiguous,
+    caller should fall back to classify_lead_reply_intent."""
+    text = message.strip()
+    if not text:
+        return False
+    if EMAIL_PATTERN.search(text) or PHONE_PATTERN.search(text):
+        return False
+
+    lower = text.lower()
+    if lower.startswith(WH_WORDS) or any(term in lower for term in REQUEST_TERMS):
+        return True
+
+    if len(text.split()) <= 3:
+        return False
+
+    return None
+
+def classify_lead_reply_intent(message: str) -> str:
+    try:
+        ai_message = llm.invoke(CLASSIFY_LEAD_REPLY_PROMPT.format(message=message))
+        raw = ai_message.content.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = _json.loads(raw)
+        if isinstance(parsed, dict) and parsed.get("intent") in ("contact_info", "new_question"):
+            return parsed["intent"]
+        return "contact_info"
+    except Exception as e:
+        print(f"[classify_lead_reply_intent] LLM classification failed, defaulting to contact_info: {e}")
+        return "contact_info"
+
+
+def is_diverted_question(message: str, extracted: dict) -> bool:
+    if extracted.get("name") or extracted.get("email") or extracted.get("phone"):
+        return False
+
+    result = looks_like_new_question(message)
+    if result is not None:
+        return result
+
+    return classify_lead_reply_intent(message) == "new_question"
+
 
 def generate_rag_answer_with_memory(
     user_query: str,
