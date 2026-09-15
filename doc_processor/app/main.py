@@ -57,6 +57,7 @@ from .vector_store import (
   
 from .llm_service import(
     generate_rag_answer_with_memory,
+    classify_summary_query
 )
 
 from slowapi import _rate_limit_exceeded_handler
@@ -460,17 +461,15 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
         stage_timings: dict = {}
         target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
         
-        search_query = payload.query
-        summary_terms = ["summarize", "summary", "overview", "recap", "main points"]
-        if any(term in payload.query.lower() for term in summary_terms):
-            search_query = "overview summary main background introduction key takeaways"
+        summary_info = classify_summary_query(payload.query)
+        search_query = summary_info["search_query"]
 
         retrieved_chunks = search_similar_chunks(
             query_text=search_query,
             top_k=payload.top_k,
             document_id=target_doc_id,
             timing_out=stage_timings
-        )
+        ) 
 
         llm_result = generate_rag_answer_with_memory(
             user_query=payload.query,

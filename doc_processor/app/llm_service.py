@@ -64,6 +64,47 @@ NO_ANSWER_TEXT = "I cannot find the answer in the provided document context."
 EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 PHONE_PATTERN = re.compile(r"(\+?\d[\d\-\s()]{7,}\d)")
 
+SUMMARY_TRIGGER_RE = re.compile(
+    r"\b(summari[sz]e|summary|summaries|recap|overview|tl;?dr|"
+    r"main\s+points|key\s+points|highlights|gist|brief\s+me(\s+on)?)\b",
+    re.IGNORECASE,
+)
+
+SUMMARY_OVERVIEW_SEARCH_QUERY = (
+    "overview summary main background introduction key takeaways"
+)
+
+_SUMMARY_FILLER_WORDS = {
+    "give", "me", "a", "an", "the", "of", "on", "for", "about", "regarding",
+    "this", "that", "our", "my", "your", "please", "can", "you", "could",
+    "i", "want", "need", "get", "provide", "short", "quick", "brief",
+    "document", "doc", "chat", "conversation", "session", "everything",
+    "all", "it", "thread", "file", "up", "with",
+}
+
+
+def classify_summary_query(query: str) -> dict:
+    
+    if not query or not query.strip():
+        return {"is_summary": False, "mode": None, "search_query": query}
+
+    match = SUMMARY_TRIGGER_RE.search(query)
+    if not match:
+        return {"is_summary": False, "mode": None, "search_query": query}
+
+    remainder = query[:match.start()] + " " + query[match.end():]
+    tokens = re.findall(r"[a-zA-Z0-9']+", remainder.lower())
+    content_tokens = [t for t in tokens if t not in _SUMMARY_FILLER_WORDS]
+
+    if not content_tokens:
+        return {
+            "is_summary": True,
+            "mode": "generic",
+            "search_query": SUMMARY_OVERVIEW_SEARCH_QUERY,
+        }
+
+    return {"is_summary": True, "mode": "targeted", "search_query": query}
+
 
 def _to_lc_messages(history: list[dict]) -> list:
     """Converts our plain role/content dicts into LangChain message objects.
@@ -259,8 +300,7 @@ def generate_rag_answer_with_memory(
     context_str, context_tokens = build_safe_context(retrieved_chunks, user_query, reduced_history)
     t_ctx_end = time.perf_counter()
 
-    summary_keywords = ["summarize", "summary", "recap", "overview", "main points"]
-    is_summary_query = any(kw in user_query.lower() for kw in summary_keywords)
+    is_summary_query = classify_summary_query(user_query)["is_summary"]
 
     doc_context = context_str if context_str else "No specific document context found."
 
