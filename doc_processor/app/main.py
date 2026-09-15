@@ -68,7 +68,7 @@ from .internal import router as internal_router
 from .widget_cors import WidgetCorsMiddleware,ConditionalCORSMiddleware
 
 Base.metadata.create_all(bind=engine)
-
+  
 app = FastAPI(
     title="Mini Document Processing System",
     description="API for uploading, analyzing, searching, and comparing documents.",

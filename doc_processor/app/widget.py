@@ -1,4 +1,5 @@
 import json
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Response
 from sqlalchemy.orm import Session
@@ -165,11 +166,15 @@ def _resolve_department(db: Session, company: Company, category_name: str | None
     return None, None
 
 def _answer_with_rag(
+    request: Request,
     db: Session,
     session: ChatSession,
     company: Company,
     payload: WidgetChatRequest,
+    initial_stage_timings: dict | None = None,
 ) -> WidgetChatResponse:
+    stage_timings: dict = dict(initial_stage_timings) if initial_stage_timings else {}
+
     all_messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == payload.session_id)
@@ -182,6 +187,7 @@ def _answer_with_rag(
         query_text=payload.query,
         top_k=5,
         document_id=str(company.document_id),
+        timing_out=stage_timings,
     )
 
     try:
@@ -191,22 +197,32 @@ def _answer_with_rag(
             chat_history=history_payload,
         )
     except Exception:
+        request.state.stage_timings = stage_timings
         raise HTTPException(
             status_code=503,
             detail="The assistant is temporarily unavailable. Please try again shortly.",
         )
 
+    stage_timings["context_prep_ms"] = llm_result.get("context_prep_ms", 0)
+    stage_timings["llm_generation_ms"] = llm_result.get("llm_generation_ms", 0)
+
     answer_text = llm_result["text"]
 
     if answer_text == NO_ANSWER_TEXT:
+        t0 = time.perf_counter()
         resolved_query = resolve_standalone_query(payload.query, history_payload)
+        stage_timings["resolve_standalone_query_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
         active_departments = _get_active_departments(db, company.id)
+
+        t0 = time.perf_counter()
         category_name = classify_query(resolved_query, [d.name for d in active_departments])
+        stage_timings["classify_query_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
         if session.captured_name and session.captured_email:
             department_id, resolved_category_name = _resolve_department(db, company, category_name)
 
+            t0 = time.perf_counter()
             append_lead(
                 company_id=str(company.id),
                 company_name=company.name,
@@ -216,6 +232,8 @@ def _answer_with_rag(
                 question=resolved_query,
                 session_id=str(session.id),
             )
+            stage_timings["excel_export_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+
             lead_row = Lead(
                 company_id=company.id,
                 session_id=session.id,
@@ -234,6 +252,7 @@ def _answer_with_rag(
                 (d.email for d in active_departments if d.id == department_id),
                 None,
             )
+            t0 = time.perf_counter()
             try:
                 sent = send_lead_notification(company, lead_row, department_email)
                 if sent:
@@ -242,6 +261,7 @@ def _answer_with_rag(
                     db.commit()
             except Exception as e:
                 print(f"[_answer_with_rag] Unexpected error during lead notification: {e}")
+            stage_timings["email_notification_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
             answer_text = AUTO_LEAD_FORWARDED_TEXT
         else:
@@ -255,6 +275,8 @@ def _answer_with_rag(
     assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
     db.add_all([user_msg, assistant_msg])
     db.commit()
+
+    request.state.stage_timings = stage_timings
 
     return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
 
@@ -304,15 +326,23 @@ def widget_chat(
     _check_origin_and_allow(request, response, company)
 
     if session.awaiting_lead_capture:
+        stage_timings: dict = {}
         pending = _load_pending_lead(session)
-        extracted = extract_lead_info(payload.query)
 
-        if is_diverted_question(payload.query, extracted):
+        t0 = time.perf_counter()
+        extracted = extract_lead_info(payload.query)
+        stage_timings["extract_lead_info_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+
+        t0 = time.perf_counter()
+        diverted = is_diverted_question(payload.query, extracted)
+        stage_timings["diversion_check_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+
+        if diverted:
             session.awaiting_lead_capture = False
             session.pending_lead_query = None
             session.lead_capture_attempts = 0
             db.add(session)
-            return _answer_with_rag(db, session, company, payload)
+            return _answer_with_rag(request, db, session, company, payload, initial_stage_timings=stage_timings)
 
         name = extracted.get("name") or pending["name"]
         email = extracted.get("email") or pending["email"]
@@ -406,4 +436,4 @@ def widget_chat(
             return WidgetChatResponse(session_id=payload.session_id, answer=reprompt_text)
 
     
-    return _answer_with_rag(db, session, company, payload)
+    return _answer_with_rag(request, db, session, company, payload)

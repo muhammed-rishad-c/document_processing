@@ -33,7 +33,7 @@ primary_llm = ChatOpenAI(
     api_key=LLM_API_KEY,
     temperature=0.3,
     default_headers=EXTRA_HEADERS,
-    timeout=8,
+    timeout=30,
     max_retries=0,
 )
 
@@ -321,6 +321,17 @@ def generate_rag_answer_with_memory(
     )
     t_llm_end = time.perf_counter()
 
+    model_used = (
+        ai_message.response_metadata.get("model_name")
+        or ai_message.response_metadata.get("model")
+        or "unknown"
+    )
+    is_fallback = model_used.strip().lower() not in (MODEL_NAME.strip().lower(), "")
+    print(
+        f"[generate_rag_answer_with_memory] model_used={model_used} "
+        f"fallback={is_fallback} llm_ms={round((t_llm_end - t_llm_start) * 1000, 2)}"
+    )
+
     raw_text = ai_message.content.strip()
     cleaned_lines = [
         line
@@ -356,6 +367,7 @@ def generate_rag_answer_with_memory(
         "context_tokens": context_tokens,
         "context_prep_ms": round((t_ctx_end - t_ctx_start) * 1000, 2),
         "llm_generation_ms": round((t_llm_end - t_llm_start) * 1000, 2),
+        "model_used": model_used,
     }
     
 
