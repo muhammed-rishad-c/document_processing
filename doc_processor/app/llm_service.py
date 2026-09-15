@@ -19,17 +19,37 @@ EXTRA_HEADERS = {
 }
 MAX_CONTEXT_TOKENS = 4000
 
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("OPEN_API_KEY"))
-MODEL_NAME = os.getenv("LLM_MODEL_NAME", "openrouter/free")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://192.168.1.99:1234/v1")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "lm-studio")
+MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gemma-4-e4b-it")
 
-llm = ChatOpenAI(
+FALLBACK_BASE_URL = os.getenv("FALLBACK_LLM_BASE_URL", "https://openrouter.ai/api/v1")
+FALLBACK_API_KEY = os.getenv("OPEN_API_KEY")
+FALLBACK_LLM_MODEL_NAME="openrouter/free"
+
+primary_llm = ChatOpenAI(
     model=MODEL_NAME,
     base_url=LLM_BASE_URL,
     api_key=LLM_API_KEY,
     temperature=0.3,
     default_headers=EXTRA_HEADERS,
+    timeout=8,
+    max_retries=0,
 )
+
+
+fallback_llm = ChatOpenAI(
+    model=FALLBACK_LLM_MODEL_NAME,
+    base_url=FALLBACK_BASE_URL,
+    api_key=FALLBACK_API_KEY,
+    temperature=0.3,
+    default_headers=EXTRA_HEADERS,
+    timeout=20,
+    max_retries=1,
+)
+
+
+llm = primary_llm.with_fallbacks([fallback_llm])
 
 rag_prompt = ChatPromptTemplate.from_messages(
     [
