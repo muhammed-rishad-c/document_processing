@@ -134,6 +134,7 @@ def build_safe_context(
 
     combined_context = "".join(selected_chunks)
     return combined_context, current_tokens
+
  
 LEAD_IN_PATTERN = re.compile(
     r"^(based on|according to|as (?:stated|mentioned|shown|outlined) in|as per|per|from)\s+"
