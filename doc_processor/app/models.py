@@ -41,6 +41,10 @@ class ChatSession(Base):
     pending_lead_query = Column(Text, nullable=True)
     lead_capture_attempts = Column(Integer, nullable=False, default=0, server_default="0")
 
+    captured_name = Column(String, nullable=True)
+    captured_email = Column(String, nullable=True)
+    captured_phone = Column(String, nullable=True)
+
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
     company = relationship("Company", back_populates="chat_sessions")\
     

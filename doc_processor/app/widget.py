@@ -46,6 +46,10 @@ LEAD_CAPTURE_THANK_YOU = (
 LEAD_CAPTURE_GIVE_UP = (
     "No problem — feel free to ask me anything else in the meantime!"
 )
+AUTO_LEAD_FORWARDED_TEXT = (
+    "I couldn't find that in our docs, but I've passed it along to our team — "
+    "they'll follow up if needed."
+)
 
 
 def _session_ip_backstop(request: Request):
@@ -200,11 +204,52 @@ def _answer_with_rag(
         active_departments = _get_active_departments(db, company.id)
         category_name = classify_query(resolved_query, [d.name for d in active_departments])
 
-        session.awaiting_lead_capture = True
-        session.lead_capture_attempts = 0
-        _save_pending_lead(session, payload.query, resolved_query, category_name, None, None, None)
-        db.add(session)
-        answer_text = LEAD_CAPTURE_PROMPT
+        if session.captured_name and session.captured_email:
+            department_id, resolved_category_name = _resolve_department(db, company, category_name)
+
+            append_lead(
+                company_id=str(company.id),
+                company_name=company.name,
+                name=session.captured_name,
+                email=session.captured_email,
+                phone=session.captured_phone,
+                question=resolved_query,
+                session_id=str(session.id),
+            )
+            lead_row = Lead(
+                company_id=company.id,
+                session_id=session.id,
+                question=resolved_query,
+                name=session.captured_name,
+                email=session.captured_email,
+                phone=session.captured_phone,
+                department_id=department_id,
+                category_name=resolved_category_name,
+            )
+            db.add(lead_row)
+            db.commit()
+            db.refresh(lead_row)
+
+            department_email = next(
+                (d.email for d in active_departments if d.id == department_id),
+                None,
+            )
+            try:
+                sent = send_lead_notification(company, lead_row, department_email)
+                if sent:
+                    lead_row.email_sent = True
+                    db.add(lead_row)
+                    db.commit()
+            except Exception as e:
+                print(f"[_answer_with_rag] Unexpected error during lead notification: {e}")
+
+            answer_text = AUTO_LEAD_FORWARDED_TEXT
+        else:
+            session.awaiting_lead_capture = True
+            session.lead_capture_attempts = 0
+            _save_pending_lead(session, payload.query, resolved_query, category_name, None, None, None)
+            db.add(session)
+            answer_text = LEAD_CAPTURE_PROMPT
 
     user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
     assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
@@ -299,6 +344,9 @@ def widget_chat(
             session.awaiting_lead_capture = False
             session.pending_lead_query = None
             session.lead_capture_attempts = 0
+            session.captured_name = name
+            session.captured_email = email
+            session.captured_phone = phone
             db.add(session)
 
             user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
