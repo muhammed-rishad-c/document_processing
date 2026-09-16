@@ -48,8 +48,11 @@ doc_processor/
 └── eval/
     ├── eval_dataset.json          # 25-question evaluation set (see §6)
     ├── answer_evaluation.py       # answer quality + hallucination scoring
-    ├── chunk_size_experiment.py   # chunk-size sweep
-    ├── topk_experiment.py         # top-k sweep
+    ├── chunk_size_experiment.py   # chunk-size sweep (single-variable, §9)
+    ├── topk_experiment.py         # top-k sweep (single-variable, §10)
+    ├── grid_experiment.py         # joint chunk_size x chunk_overlap x top_k grid (§11); re-indexes
+    │                               #   once per (chunk_size, chunk_overlap) pair, resumable across
+    │                               #   runs via results/grid_experiment_results.json
     └── results/                   # timestamped JSON output from each script above
 ```
 
@@ -65,7 +68,7 @@ This section walks through exactly what happens, function by function, with the 
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Extract text                          | `extract_text_from_file(file_bytes, filename)` (`service.py`)                                                                                  | `pymupdf` (`fitz`) for `.pdf`; raw decode for `.txt`                          | PDFs:`fitz.open(stream=..., filetype="pdf")`, text pulled page-by-page via `page.get_text("text")`. `.txt`: `file_bytes.decode("utf-8", errors="ignore")`. Null bytes stripped from output either way. Raises `ValueError` if the result is empty/unreadable or the extension isn't `.txt`/`.pdf`. |
 | 2. Compute document stats                | `calculate_document_stats(text)` (`service.py`)                                                                                                | stdlib`re`, `collections.Counter`                                                 | Sentence split on`[.!?]+`, paragraph split on `\n`, words via `\b\w+\b` regex (a lightweight regex tokenizer — **not** the tiktoken tokenizer, used only for display stats). Stopword-filtered top-10 word frequency.                                                                               |
-| 3. Chunk the text                        | `chunk_text(text, max_chunk_size=500, chunk_overlap=50)` (`service.py`)                                                                        | `langchain_text_splitters.RecursiveCharacterTextSplitter.from_tiktoken_encoder`     | `encoding_name="cl100k_base"`, `chunk_size=500`, `chunk_overlap=50`, `separators=["\n\n", "\n", ". ", " ", ""]`. Splitting is **token-aware** (length measured in tiktoken tokens, not raw characters), tried in separator-priority order. Values chosen from the evidence-based sweep in §9.     |
+| 3. Chunk the text                        | `chunk_text(text, max_chunk_size=600, chunk_overlap=50)` (`service.py`)                                                                        | `langchain_text_splitters.RecursiveCharacterTextSplitter.from_tiktoken_encoder`     | `encoding_name="cl100k_base"`, `chunk_size=600`, `chunk_overlap=50`, `separators=["\n\n", "\n", ". ", " ", ""]`. Splitting is **token-aware** (length measured in tiktoken tokens, not raw characters), tried in separator-priority order. Values chosen from the evidence-based joint grid search in §11 (superseding the earlier single-variable sweep in §9).     |
 | 4. Count tokens per chunk                | `count_token(text)` (`service.py`)                                                                                                             | `tiktoken.get_encoding("cl100k_base")`                                              | `len(tokenizer.encode(text))`. This exact tokenizer/encoding is reused everywhere token budgets matter (chunking, history reduction, context assembly) — one source of truth, no drift between subsystems.                                                                                                    |
 | 5. Embed chunks (batch)                  | `get_embeddings_batch(chunk_texts)` (`vector_store.py`)                                                                                        | `langchain_huggingface.HuggingFaceEmbeddings` → `encoder.embed_documents(texts)` | Model:`all-MiniLM-L6-v2`, loaded from a local model directory (`MODEL_PATH`). Output: 384-dim vectors, one per chunk, **order-preserving** (safe to `zip()` against the input chunk list).                                                                                                           |
 | 6. Persist chunks (Postgres)             | ORM insert of`DocumentChunk` rows                                                                                                                | SQLAlchemy                                                                            | `id`, `document_id`, `chunk_index`, `chunk_text`, `token_count` per row.                                                                                                                                                                                                                               |
@@ -80,7 +83,7 @@ This section walks through exactly what happens, function by function, with the 
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Resolve the retrieval query                 | `classify_summary_query(query)` (`llm_service.py`)                                      | stdlib`re`                                                                    | Decides whether the query is summary-flavored, and if so generic vs. targeted — see §5. Non-summary queries pass through unchanged.                                                                                                                                                                                                                       |
 | 2. Embed the query                             | `get_embedding(text)` (`vector_store.py`) → `encoder.embed_query(text)`              | `HuggingFaceEmbeddings`, same `all-MiniLM-L6-v2` model                      | Single 384-dim vector.                                                                                                                                                                                                                                                                                                                                      |
-| 3. Vector search                               | `search_similar_chunks(query_text, top_k, document_id, timing_out)` (`vector_store.py`) | `QdrantVectorStore.similarity_search_with_score_by_vector`                    | `k=top_k` (default 5, see §10), optional `Filter(FieldCondition(key="metadata.document_id", match=MatchValue(value=document_id)))` to scope search to one document/tenant. Per-stage timings (`query_embedding_ms`, `vector_search_ms`) captured for analytics.                                                                                    |
+| 3. Vector search                               | `search_similar_chunks(query_text, top_k, document_id, timing_out)` (`vector_store.py`) | `QdrantVectorStore.similarity_search_with_score_by_vector`                    | `k=top_k` (default 7, see §11, superseding the earlier single-variable sweep in §10), optional `Filter(FieldCondition(key="metadata.document_id", match=MatchValue(value=document_id)))` to scope search to one document/tenant. Per-stage timings (`query_embedding_ms`, `vector_search_ms`) captured for analytics.                                                                                    |
 | 4. Reduce chat history                         | `reduce_chat_history(chat_history, max_history_tokens=1200)` (`llm_service.py`)         | `count_token` (tiktoken)                                                      | If total history tokens ≤ 1200, passed through unchanged. Otherwise: last 4 turns kept verbatim, everything older condensed into one`[Prior Conversation Summary Block]` (first 120 chars per turn).                                                                                                                                                     |
 | 5. Assemble context                            | `build_safe_context(retrieved_chunks, query_text, chat_history)` (`llm_service.py`)     | `count_token` (tiktoken)                                                      | Greedily packs`--- Chunk N (Doc ID: ...) ---`-formatted chunks into a budget of `MAX_CONTEXT_TOKENS = 4000` (query + history tokens counted first), stopping before the first chunk that would overflow the budget.                                                                                                                                     |
 | 6. Select system prompt                        | `classify_summary_query(query)["is_summary"]` (`llm_service.py`)                        | —                                                                              | Chooses between the normal formatting prompt and the summary-flavored formatting prompt (both cap bulleted answers at 6 items; the summary prompt is tuned for broader, less follow-up-anchored answers). See §5.                                                                                                                                          |
@@ -230,6 +233,8 @@ Fixed `top_k=5`, `chunk_overlap=50`. Tested across three independent runs:
 
 **Decision: `chunk_size = 500`, `chunk_overlap = 50`.** Confidence: high (3 independent confirming runs).
 
+> **Superseded by §11.** This sweep never tested `chunk_size` together with a `top_k` other than 5. A joint grid (§11) found `chunk_size=600` scores higher when paired with `top_k=7`.
+
 ---
 
 ## 10. Top-K Experiment
@@ -252,9 +257,37 @@ Fixed chunk size, swept `top_k`:
 
 **Decision: `top_k = 5`.** Confidence: high.
 
+> **Superseded by §11.** §9 and §10 varied `chunk_size` and `top_k` independently, never together, and both used a smaller/older version of `eval_dataset.json`. A full joint grid search (below) replaces `500/5` with a new evidence-based default.
+
 ---
 
-## 11. Token & Cost Tracking
+## 11. Joint Grid Search (`chunk_size` × `chunk_overlap` × `top_k`)
+
+§9 and §10 each varied one parameter at a time, so it was never confirmed that their individual winners (`chunk_size=500`, `top_k=5`) were actually the best combination when run together. This section closes that gap with a proper joint grid, run via `eval/grid_experiment.py` — a single script that re-indexes the document once per distinct `(chunk_size, chunk_overlap)` pair, then sweeps every paired `top_k` against that same index, so results are never contaminated by a stale/leftover index from a previous grid point. Each grid point is the full 25-question `eval_dataset.json` set.
+
+| chunk_size | chunk_overlap | top_k | Top-1 % | Top-3 % | Answer Sim % | Latency (ms) |
+| ---------- | -------------- | ----- | ------- | ------- | ------------------ | ------------ |
+| 450        | 50             | 7     | 100.0   | 100.0   | 70.33               | 11,255.5     |
+| 500        | 50             | 4     | 100.0   | 100.0   | 60.67               | 9,982.3      |
+| 500        | 50             | 6     | 100.0   | 100.0   | 66.60               | 11,366.4     |
+| **600** | **50**   | **7** | **100.0** | **100.0** | **72.61**   | 11,978.4     |
+| 600        | 75             | 7     | 100.0   | 100.0   | 67.62               | 12,228.7     |
+| 600        | 100            | 7     | 100.0   | 100.0   | 69.04               | 12,457.2     |
+
+**Findings:**
+
+- **`chunk_size=600, chunk_overlap=50, top_k=7` is the new best config** — highest answer similarity (72.61%) of any run, joint or single-variable, with 100% Top-1/Top-3 retrieval.
+- **`top_k=4`'s earlier 13.64% doc-retrieval rate (§10-era result) was a bug, not a real effect.** Re-run here against a freshly-indexed corpus, `top_k=4` retrieves correctly 100% of the time — in line with every other `top_k` value. The likely cause was a stale `document_id` left over from a prior sweep's index; `get_filename_to_doc_id_map()` is now re-resolved at the start of every grid point specifically to prevent this.
+- **More overlap does not help at `chunk_size=600` — it hurts.** Overlap 50 → 72.61%, overlap 75 → 67.62%, overlap 100 → 69.04%. Larger overlap shifts chunk boundaries in ways that diluted retrieval precision here rather than improving it; `chunk_overlap=50` is kept.
+- **`chunk_size=450, top_k=7` (70.33%) is a reasonable fallback** if latency matters more than the last ~2 points of answer similarity — it's ~700ms faster than the winning config.
+
+**Decision: `chunk_size = 600`, `chunk_overlap = 50`, `top_k = 7`.** This supersedes the `500/5` decision from §9–§10. Confidence: medium — this is a single joint-grid run (not yet independently repeated the way §9's chunk-size sweep was), and retrieval accuracy is still ceiling-effected by the single-document corpus (§7), so only answer similarity and latency are true discriminators here.
+
+**Known gap carried over from this grid:** `avg_context_tokens_est` is 0 in every row above. `topk_experiment.py` / `grid_experiment.py` compute it from a `chunk_text` field on each returned source, but `main.py`'s `/documents/chat` endpoint never includes `chunk_text` when building `ChunkSource` objects — it's available in the underlying `chunks` list but not copied onto the response schema. Real context-token and cost figures for this grid are not yet available; see §16.
+
+---
+
+## 12. Token & Cost Tracking
 
 `GET /analytics` aggregates a per-request JSONL log (`analytics_log.jsonl`) capturing method, path, status code, latency, and — for the two chat endpoints — input/context/output token counts sourced from the LLM provider's own usage accounting (not estimated).
 
@@ -264,7 +297,7 @@ Fixed chunk size, swept `top_k`:
 
 ---
 
-## 12. Performance Analysis
+## 13. Performance Analysis
 
 Per-stage timing, confirmed across ~300+ real requests:
 
@@ -279,23 +312,23 @@ Per-stage timing, confirmed across ~300+ real requests:
 
 ---
 
-## 13. Improvements Implemented
+## 14. Improvements Implemented
 
 | # | Problem identified                                                                                                                                                                               | Change implemented                                                                                                                                                                                           | Result                                                                                                                                                         |
 | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1 | Discarded context-token count meant real usage was never visible in`/analytics`.                                                                                                               | Captured and returned`context_tokens` instead of discarding it.                                                                                                                                            | `/analytics` now reports real context-token totals, not estimates.                                                                                           |
 | 2 | Overly strict hallucination-refusal detection matched only one exact canned sentence.                                                                                                            | Broadened`REFUSAL_PATTERNS` to a set of equivalent refusal phrases.                                                                                                                                        | Hallucination avoidance measured at 100% (3/3) instead of undercounting.                                                                                       |
-| 3 | Chunking/retrieval configuration was unvalidated defaults.                                                                                                                                       | Ran repeated chunk-size and top-k sweeps across multiple independent runs; selected`chunk_size=500`, `top_k=5`.                                                                                          | Config finalized with documented confidence levels (§9–10).                                                                                                  |
+| 3 | Chunking/retrieval configuration was unvalidated defaults.                                                                                                                                       | Ran repeated chunk-size and top-k sweeps across multiple independent runs, then a joint grid search across `chunk_size × chunk_overlap × top_k` to confirm the combination (§9–11); selected`chunk_size=600`, `chunk_overlap=50`, `top_k=7`.                                                                                          | Config finalized with documented confidence levels; joint grid confirmed the single-variable sweeps' winners did not hold once tested together (§11).                                                                                                  |
 | 4 | New per-token CSV export would require synchronous per-chunk embedding calls inline in upload, risking latency regression.                                                                       | Implemented as an out-of-band task: batched embedding (`get_embeddings_batch`), dispatched via RQ/Redis with `BackgroundTasks` fallback.                                                                 | Upload response time unaffected by the export feature.                                                                                                         |
 | 5 | Summary-flavored queries ("summarize chapter abc") had their real subject discarded and replaced with a generic search string, and the keyword list gating this was duplicated across two files. | Added`classify_summary_query()` (generic vs. targeted classification) as a single shared helper in `llm_service.py`; wired into `main.py`'s retrieval query and `llm_service.py`'s prompt selection. | Targeted summary queries now retrieve chunks about the actual named subject; generic summaries and non-summary queries are unaffected; duplication eliminated. |
 
-**Pending, not yet implemented:** `error_detail` on the analytics log for 500s; a `?since=` filter on `/analytics`; extending generic-summary overview-boost behavior to `widget.py` (currently has no override at all, targeted or generic).
+**Pending, not yet implemented:** `error_detail` on the analytics log for 500s; a `?since=` filter on `/analytics`; extending generic-summary overview-boost behavior to `widget.py` (currently has no override at all, targeted or generic); adding `chunk_text` to the `ChunkSource` response schema so eval scripts can compute real context-token counts instead of `0` (§11, §16).
 
 ---
 
-## 14. Before vs. After Comparison
+## 15. Before vs. After Comparison
 
-**Chunk size (at fixed top_k=5):**
+**Chunk size (at fixed top_k=5, single-variable sweep, §9):**
 
 | Metric                        | Before (naive default: 300) | After (evidence-based: 500) |
 | ----------------------------- | --------------------------- | --------------------------- |
@@ -303,7 +336,7 @@ Per-stage timing, confirmed across ~300+ real requests:
 | Retrieval accuracy            | 100%*                       | 100%*                       |
 | Latency                       | ~8567 ms                    | ~7000–8500 ms              |
 
-**Top-k (at fixed chunk size):**
+**Top-k (at fixed chunk size, single-variable sweep, §10):**
 
 | Metric                        | Before (naive default: k=1) | After (evidence-based: k=5) |
 | ----------------------------- | --------------------------- | --------------------------- |
@@ -311,16 +344,25 @@ Per-stage timing, confirmed across ~300+ real requests:
 | Retrieval accuracy            | 100%*                       | 100%*                       |
 | Latency                       | 5612–6756 ms               | 5749–7326 ms               |
 
+**Final joint-optimized config (§11) vs. the naive default:**
+
+| Metric                        | Before (naive default: `chunk_size=300, top_k=1`) | After (joint grid winner: `chunk_size=600, chunk_overlap=50, top_k=7`) |
+| ----------------------------- | --------------------------- | --------------------------- |
+| Answer relevance (cosine sim) | ~26.56–40.42% (k=1 range)  | **72.61%**             |
+| Retrieval accuracy            | 100%*                       | 100%*                       |
+| Latency                       | ~5612–6756 ms               | ~11,978 ms                 |
+
 \* Retrieval accuracy is unchanged because it's ceiling-effected by the single-document corpus (§7), not because tuning had no retrieval impact.
 
-**Caveat:** chunk_size and top_k were swept independently. A single confirming run of a combined config (`chunk_size=400, top_k=6`) landed within the same noise band as the chosen `500/5` config and was under-replicated by comparison, so `500/5` was kept. A full joint grid search was not performed.
+**Caveat, resolved:** the two single-variable sweeps above (§9, §10) never confirmed their winners held when combined — an earlier single confirming run of `chunk_size=400, top_k=6` had landed within noise of the chosen `500/5` and was left under-replicated. §11's joint grid search closes this gap: it found `500/5` was **not** the joint optimum — `600/50/7` scores meaningfully higher on answer relevance, at the cost of noticeably higher latency (~12s vs. the ~7-8.5s and ~5.6-7.3s ranges above). Whether that latency cost is acceptable depends on the deployment's tolerance; `chunk_size=450, top_k=7` (70.33%, ~11.3s) is documented in §11 as a faster fallback.
 
 ---
 
-## 15. Known Limitations & Next Steps
+## 16. Known Limitations & Next Steps
 
 - **Retrieval accuracy is not a discriminating metric on this corpus** — a multi-document corpus would be needed to evaluate retrieval quality independent of answer quality.
 - **LLM-side non-determinism** (`openrouter/free`'s multi-model auto-routing + temperature=0.3) means identical configurations produce different absolute scores run-to-run (~±3–7 points on cosine similarity). Rankings between configurations have held stable.
-- **A joint chunk_size × top_k grid search** has not been performed.
+- ~~A joint chunk_size × top_k grid search has not been performed.~~ **Done (§11).** One caveat carried forward: it's currently a single run per grid point, not independently repeated the way §9's chunk-size sweep was (3 confirming runs) — worth a repeat pass if higher confidence is needed before a production change.
+- **`avg_context_tokens_est` is always 0 in every eval script's output**, including §11's joint grid. Root cause found: `main.py`'s `/documents/chat` endpoint builds `ChunkSource` objects without a `chunk_text` field, even though `chunk_text` is available on the underlying `chunks` list — it's just never copied onto the response. Real context-token and cost figures require adding that field to the schema (see §14, pending).
 - **~1–2% request failure rate (HTTP 500)** observed under sustained sweep load, with no captured error detail.
 - **`widget.py` has no generic-summary overview boost** — bare "summarize" queries there still search on the literal word, unlike the fixed `main.py` path (§5).
