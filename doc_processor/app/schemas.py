@@ -76,7 +76,7 @@ class SemanticSearchResponse(BaseModel):
     
 class RAGRequest(BaseModel):
     query: str
-    top_k: int = 3
+    top_k: int = 7
     document_id: Optional[str] = None
     
 

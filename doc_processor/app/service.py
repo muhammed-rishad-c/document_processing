@@ -141,7 +141,7 @@ def generate_chunk_token_sequence_csv(chunks: list[dict], output_path: str) -> d
         "output_path": output_path,
     }
 
-def chunk_text(text: str, max_chunk_size: int = 300, chunk_overlap: int = 50) -> list[dict]:
+def chunk_text(text: str, max_chunk_size: int = 600, chunk_overlap: int = 50) -> list[dict]:
     if not text.strip():
         return []
 

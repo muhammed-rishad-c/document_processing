@@ -95,7 +95,7 @@ def delete_vector(doc_id: str):
 
 
 def search_similar_chunks(query_text: str,
-                           top_k: int = 5,
+                           top_k: int = 7,
                            document_id: str = None,
                            timing_out: dict | None = None) -> list[dict]:
     t_embed_start = time.perf_counter()

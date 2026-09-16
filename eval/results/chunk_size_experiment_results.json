@@ -31,5 +31,16 @@
     "top3_accuracy_pct": 100.0,
     "avg_cosine_similarity_pct": 54.53,
     "avg_context_tokens_est": 0
+  },
+  {
+    "chunk_size": 600,
+    "chunk_overlap": 50,
+    "eval_top_k": 6,
+    "questions_run": 25,
+    "avg_latency_ms": 13556.56,
+    "top1_accuracy_pct": 100.0,
+    "top3_accuracy_pct": 100.0,
+    "avg_cosine_similarity_pct": 71.63,
+    "avg_context_tokens_est": 0
   }
 ]

@@ -817,7 +817,7 @@
     let sessionHasActivity = false; // true once the user has sent >=1 message this session
     let feedbackGiven = false;      // true once feedback was submitted or skipped for this session
     let idleTimer = null;
-    const IDLE_FEEDBACK_MS = 2 * 60 * 1000; // 2 minutes of inactivity after a reply
+    const IDLE_FEEDBACK_MS = 5 * 60 * 1000; // 2 minutes of inactivity after a reply
 
     // ---------- Chat widget open/close ----------
     function toggleChatPanel(forceOpen) {
@@ -1025,7 +1025,7 @@
     }
 
     // Retrieval depth for RAG context — fixed server-side default, not user-configurable.
-    const DEFAULT_TOP_K = 5;
+    const DEFAULT_TOP_K = 7;
 
     // Perform Stateful RAG Chat
     async function performStatefulChat() {

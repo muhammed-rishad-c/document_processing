@@ -185,7 +185,7 @@ def _answer_with_rag(
 
     retrieved_chunks = search_similar_chunks(
         query_text=payload.query,
-        top_k=5,
+        top_k=7,
         document_id=str(company.document_id),
         timing_out=stage_timings,
     )

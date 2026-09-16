@@ -2,41 +2,41 @@
   {
     "top_k": 4,
     "questions_run": 25,
-    "avg_latency_ms": 10791.68,
-    "doc_retrieval_rate_pct": 100.0,
-    "avg_cosine_similarity_pct": 64.47,
+    "avg_latency_ms": 12909.44,
+    "doc_retrieval_rate_pct": 13.64,
+    "avg_cosine_similarity_pct": 65.96,
     "avg_context_tokens_est": 0
   },
   {
     "top_k": 5,
     "questions_run": 25,
-    "avg_latency_ms": 11438.35,
+    "avg_latency_ms": 10810.28,
     "doc_retrieval_rate_pct": 100.0,
-    "avg_cosine_similarity_pct": 72.67,
+    "avg_cosine_similarity_pct": 67.02,
     "avg_context_tokens_est": 0
   },
   {
     "top_k": 6,
     "questions_run": 25,
-    "avg_latency_ms": 11478.29,
+    "avg_latency_ms": 10565.26,
     "doc_retrieval_rate_pct": 100.0,
-    "avg_cosine_similarity_pct": 69.99,
+    "avg_cosine_similarity_pct": 69.02,
     "avg_context_tokens_est": 0
   },
   {
     "top_k": 7,
     "questions_run": 25,
-    "avg_latency_ms": 11175.91,
+    "avg_latency_ms": 11020.46,
     "doc_retrieval_rate_pct": 100.0,
-    "avg_cosine_similarity_pct": 69.54,
+    "avg_cosine_similarity_pct": 69.77,
     "avg_context_tokens_est": 0
   },
   {
     "top_k": 8,
     "questions_run": 25,
-    "avg_latency_ms": 11524.3,
+    "avg_latency_ms": 10446.36,
     "doc_retrieval_rate_pct": 100.0,
-    "avg_cosine_similarity_pct": 71.36,
+    "avg_cosine_similarity_pct": 68.0,
     "avg_context_tokens_est": 0
   }
 ]

@@ -6,20 +6,20 @@ A FastAPI-based Retrieval-Augmented Generation (RAG) chatbot: upload a document,
 
 ## 1. Tech Stack
 
-| Layer | Tool | Notes |
-|---|---|---|
-| API framework | FastAPI + Starlette | — |
-| Relational DB | PostgreSQL (SQLAlchemy ORM) | Documents, chunks, chat sessions/messages, companies, departments, leads |
-| Vector DB | Qdrant, collection `document_chunks` | 384-dim vectors, cosine distance |
-| Embedding model | `sentence-transformers/all-MiniLM-L6-v2`, loaded via `langchain_huggingface.HuggingFaceEmbeddings` from a local model directory | Same model used for query embedding, chunk embedding, and eval answer-similarity scoring |
-| Vector search wrapper | `langchain_qdrant.QdrantVectorStore` (`similarity_search_with_score_by_vector`) | Lazy singleton, created on first search call |
-| Tokenizer | `tiktoken`, encoding `cl100k_base` (BPE) | Used consistently for chunk splitting, token counting, history-budget checks, and context-budget checks |
-| Text splitter | `langchain_text_splitters.RecursiveCharacterTextSplitter.from_tiktoken_encoder` | Token-aware splitting (length measured in tokens, not characters), separator priority `["\n\n", "\n", ". ", " ", ""]` |
-| PDF/text extraction | `pymupdf` (`fitz`) for `.pdf`, raw UTF-8 decode for `.txt` | Null bytes stripped from extracted text |
-| LLM (primary) | Local LM Studio server, model `gemma-4-e4b-it` (configurable via `LLM_MODEL_NAME`), via `langchain_openai.ChatOpenAI` pointed at an OpenAI-compatible local endpoint | temperature=0.3, 30s timeout, no retries |
-| LLM (fallback) | OpenRouter, model `openrouter/free` (auto-routed across community-hosted models) | temperature=0.3, 20s timeout, 1 retry — wired via LangChain's `.with_fallbacks([...])` |
-| Async task queue (optional) | RQ + Redis, with automatic fallback to FastAPI `BackgroundTasks` if Redis is unavailable | Used for the per-chunk token-sequence CSV export |
-| Email delivery | `smtplib` + `email.mime` (stdlib, no new dependency) | STARTTLS by default; dev/test uses a Mailtrap sandbox inbox |
+| Layer                       | Tool                                                                                                                                                                      | Notes                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| API framework               | FastAPI + Starlette                                                                                                                                                       | —                                                                                                                     |
+| Relational DB               | PostgreSQL (SQLAlchemy ORM)                                                                                                                                               | Documents, chunks, chat sessions/messages, companies, departments, leads                                               |
+| Vector DB                   | Qdrant, collection`document_chunks`                                                                                                                                     | 384-dim vectors, cosine distance                                                                                       |
+| Embedding model             | `sentence-transformers/all-MiniLM-L6-v2`, loaded via `langchain_huggingface.HuggingFaceEmbeddings` from a local model directory                                       | Same model used for query embedding, chunk embedding, and eval answer-similarity scoring                               |
+| Vector search wrapper       | `langchain_qdrant.QdrantVectorStore` (`similarity_search_with_score_by_vector`)                                                                                       | Lazy singleton, created on first search call                                                                           |
+| Tokenizer                   | `tiktoken`, encoding `cl100k_base` (BPE)                                                                                                                              | Used consistently for chunk splitting, token counting, history-budget checks, and context-budget checks                |
+| Text splitter               | `langchain_text_splitters.RecursiveCharacterTextSplitter.from_tiktoken_encoder`                                                                                         | Token-aware splitting (length measured in tokens, not characters), separator priority`["\n\n", "\n", ". ", " ", ""]` |
+| PDF/text extraction         | `pymupdf` (`fitz`) for `.pdf`, raw UTF-8 decode for `.txt`                                                                                                        | Null bytes stripped from extracted text                                                                                |
+| LLM (primary)               | Local LM Studio server, model`gemma-4-e4b-it` (configurable via `LLM_MODEL_NAME`), via `langchain_openai.ChatOpenAI` pointed at an OpenAI-compatible local endpoint | temperature=0.3, 30s timeout, no retries                                                                               |
+| LLM (fallback)              | OpenRouter, model`openrouter/free` (auto-routed across community-hosted models)                                                                                         | temperature=0.3, 20s timeout, 1 retry — wired via LangChain's`.with_fallbacks([...])`                               |
+| Async task queue (optional) | RQ + Redis, with automatic fallback to FastAPI`BackgroundTasks` if Redis is unavailable                                                                                 | Used for the per-chunk token-sequence CSV export                                                                       |
+| Email delivery              | `smtplib` + `email.mime` (stdlib, no new dependency)                                                                                                                  | STARTTLS by default; dev/test uses a Mailtrap sandbox inbox                                                            |
 
 ---
 
@@ -61,32 +61,32 @@ This section walks through exactly what happens, function by function, with the 
 
 ### 3.1 Upload & Ingestion (`POST /documents/upload`)
 
-| Step | Function | Library | Parameters / detail |
-|---|---|---|---|
-| 1. Extract text | `extract_text_from_file(file_bytes, filename)` (`service.py`) | `pymupdf` (`fitz`) for `.pdf`; raw decode for `.txt` | PDFs: `fitz.open(stream=..., filetype="pdf")`, text pulled page-by-page via `page.get_text("text")`. `.txt`: `file_bytes.decode("utf-8", errors="ignore")`. Null bytes stripped from output either way. Raises `ValueError` if the result is empty/unreadable or the extension isn't `.txt`/`.pdf`. |
-| 2. Compute document stats | `calculate_document_stats(text)` (`service.py`) | stdlib `re`, `collections.Counter` | Sentence split on `[.!?]+`, paragraph split on `\n`, words via `\b\w+\b` regex (a lightweight regex tokenizer — **not** the tiktoken tokenizer, used only for display stats). Stopword-filtered top-10 word frequency. |
-| 3. Chunk the text | `chunk_text(text, max_chunk_size=500, chunk_overlap=50)` (`service.py`) | `langchain_text_splitters.RecursiveCharacterTextSplitter.from_tiktoken_encoder` | `encoding_name="cl100k_base"`, `chunk_size=500`, `chunk_overlap=50`, `separators=["\n\n", "\n", ". ", " ", ""]`. Splitting is **token-aware** (length measured in tiktoken tokens, not raw characters), tried in separator-priority order. Values chosen from the evidence-based sweep in §9. |
-| 4. Count tokens per chunk | `count_token(text)` (`service.py`) | `tiktoken.get_encoding("cl100k_base")` | `len(tokenizer.encode(text))`. This exact tokenizer/encoding is reused everywhere token budgets matter (chunking, history reduction, context assembly) — one source of truth, no drift between subsystems. |
-| 5. Embed chunks (batch) | `get_embeddings_batch(chunk_texts)` (`vector_store.py`) | `langchain_huggingface.HuggingFaceEmbeddings` → `encoder.embed_documents(texts)` | Model: `all-MiniLM-L6-v2`, loaded from a local model directory (`MODEL_PATH`). Output: 384-dim vectors, one per chunk, **order-preserving** (safe to `zip()` against the input chunk list). |
-| 6. Persist chunks (Postgres) | ORM insert of `DocumentChunk` rows | SQLAlchemy | `id`, `document_id`, `chunk_index`, `chunk_text`, `token_count` per row. |
-| 7. Persist vectors (Qdrant) | `store_chunk_vector(vector_data)` (`vector_store.py`) | `qdrant_client` | One `PointStruct` per chunk: `vector=embedding`, `payload={page_content, metadata: {document_id, chunk_index, token_count, chunk_id}}`. Written via `qdrant.upsert(collection_name="document_chunks", points=[...])`. |
-| 8. (Background) token-sequence audit CSV | `generate_chunk_token_sequence_csv(chunks, output_path)` (`service.py`), dispatched via FastAPI `BackgroundTasks` (or RQ/Redis if available) | `tiktoken`, stdlib `csv` | Per chunk: encodes every token individually (`tokenizer.encode` → per-token `tokenizer.decode([token_id])`), deduplicates by `token_id`, writes `chunk_index, position, token_id, token_text` rows to CSV. Debugging/audit artifact only — never blocks the upload response. |
+| Step                                     | Function                                                                                                                                           | Library                                                                               | Parameters / detail                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Extract text                          | `extract_text_from_file(file_bytes, filename)` (`service.py`)                                                                                  | `pymupdf` (`fitz`) for `.pdf`; raw decode for `.txt`                          | PDFs:`fitz.open(stream=..., filetype="pdf")`, text pulled page-by-page via `page.get_text("text")`. `.txt`: `file_bytes.decode("utf-8", errors="ignore")`. Null bytes stripped from output either way. Raises `ValueError` if the result is empty/unreadable or the extension isn't `.txt`/`.pdf`. |
+| 2. Compute document stats                | `calculate_document_stats(text)` (`service.py`)                                                                                                | stdlib`re`, `collections.Counter`                                                 | Sentence split on`[.!?]+`, paragraph split on `\n`, words via `\b\w+\b` regex (a lightweight regex tokenizer — **not** the tiktoken tokenizer, used only for display stats). Stopword-filtered top-10 word frequency.                                                                               |
+| 3. Chunk the text                        | `chunk_text(text, max_chunk_size=500, chunk_overlap=50)` (`service.py`)                                                                        | `langchain_text_splitters.RecursiveCharacterTextSplitter.from_tiktoken_encoder`     | `encoding_name="cl100k_base"`, `chunk_size=500`, `chunk_overlap=50`, `separators=["\n\n", "\n", ". ", " ", ""]`. Splitting is **token-aware** (length measured in tiktoken tokens, not raw characters), tried in separator-priority order. Values chosen from the evidence-based sweep in §9.     |
+| 4. Count tokens per chunk                | `count_token(text)` (`service.py`)                                                                                                             | `tiktoken.get_encoding("cl100k_base")`                                              | `len(tokenizer.encode(text))`. This exact tokenizer/encoding is reused everywhere token budgets matter (chunking, history reduction, context assembly) — one source of truth, no drift between subsystems.                                                                                                    |
+| 5. Embed chunks (batch)                  | `get_embeddings_batch(chunk_texts)` (`vector_store.py`)                                                                                        | `langchain_huggingface.HuggingFaceEmbeddings` → `encoder.embed_documents(texts)` | Model:`all-MiniLM-L6-v2`, loaded from a local model directory (`MODEL_PATH`). Output: 384-dim vectors, one per chunk, **order-preserving** (safe to `zip()` against the input chunk list).                                                                                                           |
+| 6. Persist chunks (Postgres)             | ORM insert of`DocumentChunk` rows                                                                                                                | SQLAlchemy                                                                            | `id`, `document_id`, `chunk_index`, `chunk_text`, `token_count` per row.                                                                                                                                                                                                                               |
+| 7. Persist vectors (Qdrant)              | `store_chunk_vector(vector_data)` (`vector_store.py`)                                                                                          | `qdrant_client`                                                                     | One`PointStruct` per chunk: `vector=embedding`, `payload={page_content, metadata: {document_id, chunk_index, token_count, chunk_id}}`. Written via `qdrant.upsert(collection_name="document_chunks", points=[...])`.                                                                                     |
+| 8. (Background) token-sequence audit CSV | `generate_chunk_token_sequence_csv(chunks, output_path)` (`service.py`), dispatched via FastAPI `BackgroundTasks` (or RQ/Redis if available) | `tiktoken`, stdlib `csv`                                                          | Per chunk: encodes every token individually (`tokenizer.encode` → per-token `tokenizer.decode([token_id])`), deduplicates by `token_id`, writes `chunk_index, position, token_id, token_text` rows to CSV. Debugging/audit artifact only — never blocks the upload response.                           |
 
 **Qdrant collection setup** (`vector_store.py`, runs once at import time via `init_qdrant()`): creates the `document_chunks` collection if it doesn't already exist, with `VectorParams(size=384, distance=Distance.COSINE)`. A `QdrantVectorStore` (LangChain wrapper around the same client/collection/embedding function) is created lazily on first search, not at import time, specifically so it never races `init_qdrant()`'s collection creation during FastAPI startup.
 
 ### 3.2 Chat / Answer Generation (`POST /documents/chat-memory`, `POST /widget/chat`)
 
-| Step | Function | Library | Parameters / detail |
-|---|---|---|---|
-| 1. Resolve the retrieval query | `classify_summary_query(query)` (`llm_service.py`) | stdlib `re` | Decides whether the query is summary-flavored, and if so generic vs. targeted — see §5. Non-summary queries pass through unchanged. |
-| 2. Embed the query | `get_embedding(text)` (`vector_store.py`) → `encoder.embed_query(text)` | `HuggingFaceEmbeddings`, same `all-MiniLM-L6-v2` model | Single 384-dim vector. |
-| 3. Vector search | `search_similar_chunks(query_text, top_k, document_id, timing_out)` (`vector_store.py`) | `QdrantVectorStore.similarity_search_with_score_by_vector` | `k=top_k` (default 5, see §10), optional `Filter(FieldCondition(key="metadata.document_id", match=MatchValue(value=document_id)))` to scope search to one document/tenant. Per-stage timings (`query_embedding_ms`, `vector_search_ms`) captured for analytics. |
-| 4. Reduce chat history | `reduce_chat_history(chat_history, max_history_tokens=1200)` (`llm_service.py`) | `count_token` (tiktoken) | If total history tokens ≤ 1200, passed through unchanged. Otherwise: last 4 turns kept verbatim, everything older condensed into one `[Prior Conversation Summary Block]` (first 120 chars per turn). |
-| 5. Assemble context | `build_safe_context(retrieved_chunks, query_text, chat_history)` (`llm_service.py`) | `count_token` (tiktoken) | Greedily packs `--- Chunk N (Doc ID: ...) ---`-formatted chunks into a budget of `MAX_CONTEXT_TOKENS = 4000` (query + history tokens counted first), stopping before the first chunk that would overflow the budget. |
-| 6. Select system prompt | `classify_summary_query(query)["is_summary"]` (`llm_service.py`) | — | Chooses between the normal formatting prompt and the summary-flavored formatting prompt (both cap bulleted answers at 6 items; the summary prompt is tuned for broader, less follow-up-anchored answers). See §5. |
-| 7. Generate the answer | `rag_chain.invoke({...})` (`llm_service.py`) | `langchain_core.prompts.ChatPromptTemplate` + `langchain_openai.ChatOpenAI` | Prompt: `system_prompt` + `MessagesPlaceholder("chat_history")` (real `HumanMessage`/`AIMessage` objects, never string-templated — avoids brace-escaping issues) + `user_query`. Model: `primary_llm.with_fallbacks([fallback_llm])` — local `gemma-4-e4b-it` first, OpenRouter `openrouter/free` on failure. Both at `temperature=0.3`. |
-| 8. Post-process the raw output | inline in `generate_rag_answer_with_memory` (`llm_service.py`) | stdlib `re` | Strips stray `"User Safety:"` / `"Response Safety:"` lines; strips a leading "based on the document..."-style lead-in via `LEAD_IN_PATTERN`; caps bulleted answers at 6 items with a truncation note; falls back to the exact string `NO_ANSWER_TEXT` if nothing usable remains. |
-| 9. Fallback → lead capture (widget path only) | `resolve_standalone_query` → `classify_query` → lead-capture state machine | LLM-backed, `llm_service.py` / `widget.py` | Only triggers on an **exact match** to `NO_ANSWER_TEXT`. Documented in full in §4. |
+| Step                                           | Function                                                                                    | Library                                                                         | Parameters / detail                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Resolve the retrieval query                 | `classify_summary_query(query)` (`llm_service.py`)                                      | stdlib`re`                                                                    | Decides whether the query is summary-flavored, and if so generic vs. targeted — see §5. Non-summary queries pass through unchanged.                                                                                                                                                                                                                       |
+| 2. Embed the query                             | `get_embedding(text)` (`vector_store.py`) → `encoder.embed_query(text)`              | `HuggingFaceEmbeddings`, same `all-MiniLM-L6-v2` model                      | Single 384-dim vector.                                                                                                                                                                                                                                                                                                                                      |
+| 3. Vector search                               | `search_similar_chunks(query_text, top_k, document_id, timing_out)` (`vector_store.py`) | `QdrantVectorStore.similarity_search_with_score_by_vector`                    | `k=top_k` (default 5, see §10), optional `Filter(FieldCondition(key="metadata.document_id", match=MatchValue(value=document_id)))` to scope search to one document/tenant. Per-stage timings (`query_embedding_ms`, `vector_search_ms`) captured for analytics.                                                                                    |
+| 4. Reduce chat history                         | `reduce_chat_history(chat_history, max_history_tokens=1200)` (`llm_service.py`)         | `count_token` (tiktoken)                                                      | If total history tokens ≤ 1200, passed through unchanged. Otherwise: last 4 turns kept verbatim, everything older condensed into one`[Prior Conversation Summary Block]` (first 120 chars per turn).                                                                                                                                                     |
+| 5. Assemble context                            | `build_safe_context(retrieved_chunks, query_text, chat_history)` (`llm_service.py`)     | `count_token` (tiktoken)                                                      | Greedily packs`--- Chunk N (Doc ID: ...) ---`-formatted chunks into a budget of `MAX_CONTEXT_TOKENS = 4000` (query + history tokens counted first), stopping before the first chunk that would overflow the budget.                                                                                                                                     |
+| 6. Select system prompt                        | `classify_summary_query(query)["is_summary"]` (`llm_service.py`)                        | —                                                                              | Chooses between the normal formatting prompt and the summary-flavored formatting prompt (both cap bulleted answers at 6 items; the summary prompt is tuned for broader, less follow-up-anchored answers). See §5.                                                                                                                                          |
+| 7. Generate the answer                         | `rag_chain.invoke({...})` (`llm_service.py`)                                            | `langchain_core.prompts.ChatPromptTemplate` + `langchain_openai.ChatOpenAI` | Prompt:`system_prompt` + `MessagesPlaceholder("chat_history")` (real `HumanMessage`/`AIMessage` objects, never string-templated — avoids brace-escaping issues) + `user_query`. Model: `primary_llm.with_fallbacks([fallback_llm])` — local `gemma-4-e4b-it` first, OpenRouter `openrouter/free` on failure. Both at `temperature=0.3`. |
+| 8. Post-process the raw output                 | inline in`generate_rag_answer_with_memory` (`llm_service.py`)                           | stdlib`re`                                                                    | Strips stray`"User Safety:"` / `"Response Safety:"` lines; strips a leading "based on the document..."-style lead-in via `LEAD_IN_PATTERN`; caps bulleted answers at 6 items with a truncation note; falls back to the exact string `NO_ANSWER_TEXT` if nothing usable remains.                                                                     |
+| 9. Fallback → lead capture (widget path only) | `resolve_standalone_query` → `classify_query` → lead-capture state machine            | LLM-backed,`llm_service.py` / `widget.py`                                   | Only triggers on an**exact match** to `NO_ANSWER_TEXT`. Documented in full in §4.                                                                                                                                                                                                                                                                  |
 
 Both the visitor's message and the generated answer are persisted as `ChatMessage` rows regardless of which branch was taken, and per-stage timings are logged for `/analytics` either way.
 
@@ -108,12 +108,12 @@ When the chatbot can't answer a visitor's question (RAG returns `NO_ANSWER_TEXT`
 
 **Admin endpoints** (`internal.py`, `X-Internal-Secret` shared-secret auth):
 
-| Route | Purpose |
-|---|---|
-| `POST /internal/companies` | Create a company + its initial departments atomically (at least 1, exactly one default, required) |
-| `GET /internal/companies` | List all companies with their nested departments |
+| Route                                                 | Purpose                                                                                            |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `POST /internal/companies`                          | Create a company + its initial departments atomically (at least 1, exactly one default, required)  |
+| `GET /internal/companies`                           | List all companies with their nested departments                                                   |
 | `POST /internal/companies/{company_id}/departments` | Add departments to a company (refuses to add a second default onto a company that already has one) |
-| `GET /internal/leads/{company_id}/download` | Download captured leads as an Excel file |
+| `GET /internal/leads/{company_id}/download`         | Download captured leads as an Excel file                                                           |
 
 **Known gaps:** no standalone department edit/deactivate endpoint yet; no automatic retry for a failed lead-notification email (`Lead.email_sent = False` is the signal, nothing acts on it yet); the Excel lead export doesn't yet include a `category` column even though the DB does.
 
@@ -149,12 +149,14 @@ def classify_summary_query(query: str) -> dict:
 ```
 
 **Logic:**
+
 1. Match against `SUMMARY_TRIGGER_RE`. No match → not a summary query at all; `search_query` passes through unchanged.
 2. On a match, strip the trigger phrase out of the query, tokenize what remains (`[a-zA-Z0-9']+`), and drop anything in `_SUMMARY_FILLER_WORDS`.
 3. **Nothing meaningful left** (e.g. *"summarize"*, *"give me a summary"*, *"recap this chat"*) → **generic**: `search_query` is set to the fixed overview-boost string, same as the original (pre-fix) behavior.
 4. **Something meaningful left** (e.g. *"summarize chapter abc"* → `"chapter"`, `"abc"` survive; *"overview of onboarding"* → `"onboarding"` survives) → **targeted**: `search_query` is set to the **original user query**, so retrieval searches for the actual named subject instead of the generic string.
 
 **Where it's consumed:**
+
 - `main.py` → `chat_with_memory`: uses `classify_summary_query(payload.query)["search_query"]` as the retrieval query passed to `search_similar_chunks`. This is the actual bug fix — non-summary and generic-summary retrieval is byte-for-byte identical to the old behavior; targeted-summary retrieval now finds chunks about the real subject.
 - `llm_service.py` → `generate_rag_answer_with_memory`: uses `classify_summary_query(user_query)["is_summary"]` to pick between the normal and summary-flavored system prompt (formatting rules only — both generic and targeted summaries get the same prompt treatment, since prompt formatting doesn't depend on retrieval scope).
 - `widget.py` is intentionally **not** wired to this classifier — it never had the override bug (it always searched on the raw query), so it's unaffected either way. It also currently has no generic-summary overview boost at all; that's a separate, pre-existing gap tracked independently, not part of this fix.
@@ -169,13 +171,13 @@ def classify_summary_query(query: str) -> dict:
 
 **Dataset (`eval_dataset.json`):** 25 hand-written questions across five categories:
 
-| Category | Count | Purpose |
-|---|---|---|
-| Easy | 8 | Single-fact lookup |
-| Multi-chunk | 6 | Answer spans content spread across multiple chunks |
-| Cross-section | 4 | Requires comparing Part I vs Part II/III content |
-| Ambiguous pairs | 4 | Near-duplicate questions testing retrieval precision |
-| Unanswerable | 3 | Answer is not in the document — tests hallucination avoidance |
+| Category        | Count | Purpose                                                        |
+| --------------- | ----- | -------------------------------------------------------------- |
+| Easy            | 8     | Single-fact lookup                                             |
+| Multi-chunk     | 6     | Answer spans content spread across multiple chunks             |
+| Cross-section   | 4     | Requires comparing Part I vs Part II/III content               |
+| Ambiguous pairs | 4     | Near-duplicate questions testing retrieval precision           |
+| Unanswerable    | 3     | Answer is not in the document — tests hallucination avoidance |
 
 Each entry has a `question`, `expected_answer`, and `expected_sources` (resolved by **filename**, not document UUID — UUIDs are reassigned on every re-upload during experiments, so resolving by filename via `GET /documents` at run time keeps scoring valid across re-uploads).
 
@@ -199,14 +201,14 @@ Each entry has a `question`, `expected_answer`, and `expected_sources` (resolved
 
 Latest full run (25 questions):
 
-| Metric | Result |
-|---|---|
-| Answerable questions scored | 22 |
-| Average answer relevance (cosine similarity) | 50.82% |
-| Retrieval accuracy (doc-level) | 100.0% |
-| Hallucination tests run | 3 |
-| **Hallucination avoidance rate** | **100.0% (3/3 correctly refused)** |
-| Average latency | 7019.0 ms |
+| Metric                                       | Result                                   |
+| -------------------------------------------- | ---------------------------------------- |
+| Answerable questions scored                  | 22                                       |
+| Average answer relevance (cosine similarity) | 50.82%                                   |
+| Retrieval accuracy (doc-level)               | 100.0%                                   |
+| Hallucination tests run                      | 3                                        |
+| **Hallucination avoidance rate**       | **100.0% (3/3 correctly refused)** |
+| Average latency                              | 7019.0 ms                                |
 
 All 3 unanswerable questions (unnamed insect species, Gregor's exact age, exact wording of the apology letters) were correctly refused — this validates the broadened refusal-detection patterns.
 
@@ -216,11 +218,11 @@ All 3 unanswerable questions (unnamed insect species, Gregor's exact age, exact 
 
 Fixed `top_k=5`, `chunk_overlap=50`. Tested across three independent runs:
 
-| Chunk Size | Run 1 | Run 2 | Run 3 | Avg Answer Sim |
-|---|---|---|---|---|
-| 300 | 56.19% | 51.68% | 54.05%¹ | ~54% |
+| Chunk Size    | Run 1            | Run 2            | Run 3            | Avg Answer Sim   |
+| ------------- | ---------------- | ---------------- | ---------------- | ---------------- |
+| 300           | 56.19%           | 51.68%           | 54.05%¹         | ~54%             |
 | **500** | **59.74%** | **62.23%** | **60.44%** | **~60.8%** |
-| 800 | 51.98% | 55.29% | 55.43% | ~54.2% |
+| 800           | 51.98%           | 55.29%           | 55.43%           | ~54.2%           |
 
 ¹ Only 23/25 questions completed (2 requests failed) — noted rather than silently averaged in as equivalent.
 
@@ -234,14 +236,14 @@ Fixed `top_k=5`, `chunk_overlap=50`. Tested across three independent runs:
 
 Fixed chunk size, swept `top_k`:
 
-| top_k | Answer Sim % | Latency (ms) |
-|---|---|---|
-| 1 | 26.56% – 40.42%² | 5612 – 6756 |
-| 3 | 55.53% – 55.57% | 6005 – 7898 |
+| top_k       | Answer Sim %               | Latency (ms)           |
+| ----------- | -------------------------- | ---------------------- |
+| 1           | 26.56% – 40.42%²         | 5612 – 6756           |
+| 3           | 55.53% – 55.57%           | 6005 – 7898           |
 | **5** | **59.93% – 62.57%** | **5749 – 7326** |
-| 6³ | 62.57% | 6849 |
-| 7³ | 57.74% | 7540 |
-| 10 | 62.08% – 63.47% | 6982 – 9349 |
+| 6³         | 62.57%                     | 6849                   |
+| 7³         | 57.74%                     | 7540                   |
+| 10          | 62.08% – 63.47%           | 6982 – 9349           |
 
 ² Wide spread on `top_k=1` is LLM-side sampling/routing variance, not a retrieval effect — retrieval accuracy stayed at 100%.
 ³ A narrower follow-up sweep around the original winner; `top_k=6` scored highest on a single run vs. `top_k=5`'s multiple confirming runs.
@@ -266,12 +268,12 @@ Fixed chunk size, swept `top_k`:
 
 Per-stage timing, confirmed across ~300+ real requests:
 
-| Pipeline | Stage | Typical share of total time |
-|---|---|---|
-| Query (`/documents/chat`) | `llm_generation_ms` | **85–98%** |
-| Query | `query_embedding_ms` + `vector_search_ms` + `context_prep_ms` | 2–15% combined |
-| Upload (`/documents/upload`) | `chunk_embedding_ms` | **~96%** (batched via `get_embeddings_batch`) |
-| Upload | `document_processing_ms` | ~4% |
+| Pipeline                       | Stage                                                               | Typical share of total time                           |
+| ------------------------------ | ------------------------------------------------------------------- | ----------------------------------------------------- |
+| Query (`/documents/chat`)    | `llm_generation_ms`                                               | **85–98%**                                     |
+| Query                          | `query_embedding_ms` + `vector_search_ms` + `context_prep_ms` | 2–15% combined                                       |
+| Upload (`/documents/upload`) | `chunk_embedding_ms`                                              | **~96%** (batched via `get_embeddings_batch`) |
+| Upload                         | `document_processing_ms`                                          | ~4%                                                   |
 
 **Bottlenecks:** LLM generation time dominates the query pipeline — a network round-trip to an external/local API always dominates local embedding/search computation. Tail latency matters separately from the mean: several requests measured 13,000–20,000 ms against a typical 3,000–8,000 ms range, consistent with model-routing variability.
 
@@ -279,13 +281,13 @@ Per-stage timing, confirmed across ~300+ real requests:
 
 ## 13. Improvements Implemented
 
-| # | Problem identified | Change implemented | Result |
-|---|---|---|---|
-| 1 | Discarded context-token count meant real usage was never visible in `/analytics`. | Captured and returned `context_tokens` instead of discarding it. | `/analytics` now reports real context-token totals, not estimates. |
-| 2 | Overly strict hallucination-refusal detection matched only one exact canned sentence. | Broadened `REFUSAL_PATTERNS` to a set of equivalent refusal phrases. | Hallucination avoidance measured at 100% (3/3) instead of undercounting. |
-| 3 | Chunking/retrieval configuration was unvalidated defaults. | Ran repeated chunk-size and top-k sweeps across multiple independent runs; selected `chunk_size=500`, `top_k=5`. | Config finalized with documented confidence levels (§9–10). |
-| 4 | New per-token CSV export would require synchronous per-chunk embedding calls inline in upload, risking latency regression. | Implemented as an out-of-band task: batched embedding (`get_embeddings_batch`), dispatched via RQ/Redis with `BackgroundTasks` fallback. | Upload response time unaffected by the export feature. |
-| 5 | Summary-flavored queries ("summarize chapter abc") had their real subject discarded and replaced with a generic search string, and the keyword list gating this was duplicated across two files. | Added `classify_summary_query()` (generic vs. targeted classification) as a single shared helper in `llm_service.py`; wired into `main.py`'s retrieval query and `llm_service.py`'s prompt selection. | Targeted summary queries now retrieve chunks about the actual named subject; generic summaries and non-summary queries are unaffected; duplication eliminated. |
+| # | Problem identified                                                                                                                                                                               | Change implemented                                                                                                                                                                                           | Result                                                                                                                                                         |
+| - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | Discarded context-token count meant real usage was never visible in`/analytics`.                                                                                                               | Captured and returned`context_tokens` instead of discarding it.                                                                                                                                            | `/analytics` now reports real context-token totals, not estimates.                                                                                           |
+| 2 | Overly strict hallucination-refusal detection matched only one exact canned sentence.                                                                                                            | Broadened`REFUSAL_PATTERNS` to a set of equivalent refusal phrases.                                                                                                                                        | Hallucination avoidance measured at 100% (3/3) instead of undercounting.                                                                                       |
+| 3 | Chunking/retrieval configuration was unvalidated defaults.                                                                                                                                       | Ran repeated chunk-size and top-k sweeps across multiple independent runs; selected`chunk_size=500`, `top_k=5`.                                                                                          | Config finalized with documented confidence levels (§9–10).                                                                                                  |
+| 4 | New per-token CSV export would require synchronous per-chunk embedding calls inline in upload, risking latency regression.                                                                       | Implemented as an out-of-band task: batched embedding (`get_embeddings_batch`), dispatched via RQ/Redis with `BackgroundTasks` fallback.                                                                 | Upload response time unaffected by the export feature.                                                                                                         |
+| 5 | Summary-flavored queries ("summarize chapter abc") had their real subject discarded and replaced with a generic search string, and the keyword list gating this was duplicated across two files. | Added`classify_summary_query()` (generic vs. targeted classification) as a single shared helper in `llm_service.py`; wired into `main.py`'s retrieval query and `llm_service.py`'s prompt selection. | Targeted summary queries now retrieve chunks about the actual named subject; generic summaries and non-summary queries are unaffected; duplication eliminated. |
 
 **Pending, not yet implemented:** `error_detail` on the analytics log for 500s; a `?since=` filter on `/analytics`; extending generic-summary overview-boost behavior to `widget.py` (currently has no override at all, targeted or generic).
 
@@ -295,19 +297,19 @@ Per-stage timing, confirmed across ~300+ real requests:
 
 **Chunk size (at fixed top_k=5):**
 
-| Metric | Before (naive default: 300) | After (evidence-based: 500) |
-|---|---|---|
-| Answer relevance (cosine sim) | ~54% | ~60.8% |
-| Retrieval accuracy | 100%* | 100%* |
-| Latency | ~8567 ms | ~7000–8500 ms |
+| Metric                        | Before (naive default: 300) | After (evidence-based: 500) |
+| ----------------------------- | --------------------------- | --------------------------- |
+| Answer relevance (cosine sim) | ~54%                        | ~60.8%                      |
+| Retrieval accuracy            | 100%*                       | 100%*                       |
+| Latency                       | ~8567 ms                    | ~7000–8500 ms              |
 
 **Top-k (at fixed chunk size):**
 
-| Metric | Before (naive default: k=1) | After (evidence-based: k=5) |
-|---|---|---|
-| Answer relevance (cosine sim) | 26.56–40.42% | 59.93–62.57% |
-| Retrieval accuracy | 100%* | 100%* |
-| Latency | 5612–6756 ms | 5749–7326 ms |
+| Metric                        | Before (naive default: k=1) | After (evidence-based: k=5) |
+| ----------------------------- | --------------------------- | --------------------------- |
+| Answer relevance (cosine sim) | 26.56–40.42%               | 59.93–62.57%               |
+| Retrieval accuracy            | 100%*                       | 100%*                       |
+| Latency                       | 5612–6756 ms               | 5749–7326 ms               |
 
 \* Retrieval accuracy is unchanged because it's ceiling-effected by the single-document corpus (§7), not because tuning had no retrieval impact.
 
