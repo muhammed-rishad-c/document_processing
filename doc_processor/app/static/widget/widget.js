@@ -11,9 +11,9 @@
   bubble.style.cssText = `
     position: fixed; bottom: 20px; right: 20px;
     width: 56px; height: 56px; border-radius: 50%;
-    background: #2757C6; color: white; border: none;
+    background: #B9791E; color: white; border: none;
     font-size: 24px; cursor: pointer; z-index: 999999;
-    box-shadow: 0 4px 14px rgba(39, 87, 198, 0.35);
+    box-shadow: 0 4px 14px rgba(185, 121, 30, 0.35);
   `;
 
   const iframe = document.createElement("iframe");
