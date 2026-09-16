@@ -1,18 +1,18 @@
-/* ---- Design tokens (enterprise dark theme) ---- */
+/* ---- Design tokens (professional light theme) ---- */
 :root {
-  --color-bg: #0D1117;        /* widget body background */
-  --color-panel: #12161D;     /* header / input row background */
-  --color-surface: #171C24;   /* assistant bubble / input fill */
-  --color-surface-alt: #1D232C; /* hover states */
-  --color-ink: #E6E8EB;       /* primary text on dark */
-  --color-accent: #2C7D74;    /* muted teal, desaturated for a corporate feel */
-  --color-accent-dark: #235F59;
-  --color-accent-soft: rgba(44, 125, 116, 0.14);
-  --color-accent-text: #8FD4CB; /* accent color when used as text, not fill */
-  --color-slate: #8A94A3;     /* secondary text */
-  --color-slate-light: #5B6472;
-  --color-amber: #D9A441;     /* muted gold for ratings */
-  --color-border: #232A33;
+  --color-bg: #FFFFFF;         /* widget body background */
+  --color-panel: #F7F8FA;      /* header / input row background */
+  --color-surface: #F1F3F5;    /* assistant bubble / input fill */
+  --color-surface-alt: #E7EAED; /* hover states */
+  --color-ink: #1A1D21;        /* primary text */
+  --color-accent: #2757C6;     /* professional blue */
+  --color-accent-dark: #1E4494;
+  --color-accent-soft: rgba(39, 87, 198, 0.08);
+  --color-accent-text: #2757C6; /* accent color when used as text, not fill */
+  --color-slate: #6B7280;      /* secondary text */
+  --color-slate-light: #9CA3AF;
+  --color-amber: #C8912A;      /* muted gold for ratings */
+  --color-border: #E3E6EA;
 
   --radius-lg: 12px;
   --radius-md: 10px;
@@ -41,12 +41,12 @@ body {
   flex-direction: column;
   position: relative;
   background: var(--color-bg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(20, 24, 33, 0.12);
 }
 
 /* ---- Header ---- */
 #chat-header {
-  background: var(--color-panel);
+  background: var(--color-bg);
   color: var(--color-ink);
   border-bottom: 1px solid var(--color-border);
   padding: 13px 16px;
@@ -69,7 +69,7 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--color-accent-text);
+  background: var(--color-accent);
   flex-shrink: 0;
 }
 
@@ -84,8 +84,8 @@ body {
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
-#close-btn:hover { background: var(--color-surface-alt); color: var(--color-ink); }
-#close-btn:focus-visible { outline: 2px solid var(--color-accent-text); outline-offset: 1px; }
+#close-btn:hover { background: var(--color-surface); color: var(--color-ink); }
+#close-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 
 /* ---- Messages ---- */
 #messages {
@@ -116,7 +116,7 @@ body {
 
 .message.user {
   background: var(--color-accent);
-  color: #F4FBFA;
+  color: #FFFFFF;
   margin-left: auto;
   border-bottom-right-radius: 3px;
 }
@@ -174,7 +174,7 @@ body {
   gap: 8px;
   padding: 12px;
   border-top: 1px solid var(--color-border);
-  background: var(--color-panel);
+  background: var(--color-bg);
   flex-shrink: 0;
 }
 
@@ -183,7 +183,7 @@ body {
   padding: 9px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-panel);
   font-size: 13.5px;
   font-family: inherit;
   color: var(--color-ink);
@@ -193,7 +193,7 @@ body {
 #query-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  background: var(--color-surface-alt);
+  background: var(--color-bg);
 }
 
 #send-btn {
@@ -201,7 +201,7 @@ body {
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
   background: var(--color-accent);
-  color: #F4FBFA;
+  color: #FFFFFF;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;
@@ -209,7 +209,7 @@ body {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 #send-btn:hover { background: var(--color-accent-dark); border-color: var(--color-accent-dark); }
-#send-btn:focus-visible { outline: 2px solid var(--color-accent-text); outline-offset: 1px; }
+#send-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 
 .hidden { display: none !important; }
 
@@ -217,7 +217,7 @@ body {
 #feedback-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(5, 7, 10, 0.7);
+  background: rgba(26, 29, 33, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -225,10 +225,11 @@ body {
 #feedback-box {
   width: 82%;
   text-align: center;
-  background: var(--color-panel);
+  background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 20px 18px;
+  box-shadow: 0 10px 30px rgba(20, 24, 33, 0.15);
 }
 #feedback-box p {
   margin: 0 0 12px;
@@ -248,7 +249,7 @@ body {
   box-sizing: border-box;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-panel);
   font-family: inherit;
   font-size: 12.5px;
   resize: none;
@@ -258,7 +259,7 @@ body {
 #feedback-comment:focus {
   outline: none;
   border-color: var(--color-accent);
-  background: var(--color-surface-alt);
+  background: var(--color-bg);
 }
 
 #feedback-actions { display: flex; justify-content: center; gap: 8px; }
@@ -271,9 +272,9 @@ body {
   font-weight: 600;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-#skip-btn { background: var(--color-surface); border-color: var(--color-border); color: var(--color-slate); }
+#skip-btn { background: var(--color-panel); border-color: var(--color-border); color: var(--color-slate); }
 #skip-btn:hover { background: var(--color-surface-alt); color: var(--color-ink); }
-#submit-feedback-btn { background: var(--color-accent); border-color: var(--color-accent); color: #F4FBFA; }
+#submit-feedback-btn { background: var(--color-accent); border-color: var(--color-accent); color: #FFFFFF; }
 #submit-feedback-btn:hover { background: var(--color-accent-dark); border-color: var(--color-accent-dark); }
 
 /* ---- Ended state ---- */
@@ -295,7 +296,7 @@ body {
   border-radius: var(--radius-md);
   background: var(--color-accent-soft);
   border: 1px solid var(--color-accent);
-  color: var(--color-accent-text);
+  color: var(--color-accent);
   display: flex;
   align-items: center;
   justify-content: center;

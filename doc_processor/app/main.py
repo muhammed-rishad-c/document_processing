@@ -208,8 +208,8 @@ async def upload_document(
         db.rollback()
         raise HTTPException(status_code=500,detail=f"Database error: {str(e)}")
     
-    
-    
+       
+      
     try:
         raw_chunks=chunk_text(text=text,max_chunk_size=chunk_size,chunk_overlap=chunk_overlap)
     except ValueError as e:

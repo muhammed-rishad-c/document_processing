@@ -12,19 +12,21 @@
     rel="stylesheet">
   <style>
     :root {
-      --ink: #0f1424;
-      --ink-2: #141a30;
-      --surface: #1a2138;
-      --surface-2: #212a47;
-      --hairline: #333e63;
-      --paper: #efe7d6;
-      --amber: #e2a13d;
-      --amber-hi: #f0b862;
-      --teal: #4f9b8f;
-      --rose: #c96a5a;
-      --text: #eee9de;
-      --text-dim: #9aa2bd;
-      --text-faint: #6d7594;
+      --paper: #F4EFE2;
+      --paper-2: #FBF8F0;
+      --card: #FDFBF5;
+      --ink: #2A241C;
+      --ink-soft: #4A4234;
+      --hairline: #DED2B4;
+      --hairline-strong: #C9BA92;
+      --amber: #B9791E;
+      --amber-hi: #8F5C13;
+      --amber-wash: rgba(185, 121, 30, 0.12);
+      --teal: #2E6E63;
+      --rose: #9C4433;
+      --text: #2A241C;
+      --text-dim: #6B6152;
+      --text-faint: #948A75;
       --radius-card: 3px;
       --radius-pill: 999px;
       --serif: 'Source Serif 4', Georgia, serif;
@@ -41,16 +43,16 @@
       margin: 0;
       padding: 0;
       background:
-        radial-gradient(1100px 600px at 12% -10%, #1c2545 0%, transparent 60%),
-        radial-gradient(900px 500px at 100% 0%, #17203a 0%, transparent 55%),
-        var(--ink);
+        radial-gradient(1100px 600px at 12% -10%, #FBF6E8 0%, transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, #F0E8D4 0%, transparent 55%),
+        var(--paper);
       color: var(--text);
       font-family: var(--sans);
       -webkit-font-smoothing: antialiased;
     }
 
     ::selection {
-      background: rgba(226, 161, 61, 0.35);
+      background: rgba(185, 121, 30, 0.22);
     }
 
     a {
@@ -65,7 +67,7 @@
     }
 
     .masthead {
-      border-bottom: 1px solid var(--hairline);
+      border-bottom: 1px solid var(--hairline-strong);
       padding-bottom: 2rem;
       margin-bottom: 3rem;
       animation: rise .7s cubic-bezier(.2, .8, .2, 1) both;
@@ -97,7 +99,7 @@
       font-size: clamp(2.1rem, 4vw, 2.9rem);
       line-height: 1.1;
       margin: 0 0 0.7rem;
-      color: var(--text);
+      color: var(--ink);
     }
 
     .masthead p {
@@ -110,7 +112,7 @@
 
     .feedback-card {
       align-self: center;
-      background: var(--surface-2);
+      background: var(--paper-2);
       border: 1px solid var(--hairline);
       border-radius: 8px;
       padding: 0.9rem 1rem;
@@ -149,7 +151,7 @@
     .feedback-card textarea {
       width: 100%;
       min-height: 50px;
-      background: var(--ink-2);
+      background: var(--card);
       border: 1px solid var(--hairline);
       color: var(--text);
       border-radius: 2px;
@@ -189,7 +191,7 @@
       font-weight: 600;
       font-size: 1.35rem;
       margin: 0;
-      color: var(--text);
+      color: var(--ink);
     }
 
     .section-head .count {
@@ -199,10 +201,11 @@
     }
 
     .panel {
-      background: linear-gradient(180deg, var(--surface), var(--surface-2));
+      background: linear-gradient(180deg, var(--card), var(--paper-2));
       border: 1px solid var(--hairline);
       border-radius: var(--radius-card);
       padding: 1.6rem;
+      box-shadow: 0 1px 2px rgba(90, 70, 30, 0.04);
     }
 
     /* ---------- form controls ---------- */
@@ -216,8 +219,8 @@
     input[type="text"],
     input[type="number"],
     select {
-      background: var(--ink-2);
-      border: 1px solid var(--hairline);
+      background: var(--card);
+      border: 1px solid var(--hairline-strong);
       color: var(--text);
       padding: 0.7rem 0.85rem;
       border-radius: 2px;
@@ -247,7 +250,7 @@
       border: 1px solid transparent;
       cursor: pointer;
       background: var(--amber);
-      color: #241705;
+      color: #FCF6E9;
       transition: filter .15s ease, transform .05s ease;
       white-space: nowrap;
     }
@@ -262,8 +265,8 @@
 
     button.ghost {
       background: transparent;
-      border: 1px solid var(--hairline);
-      color: var(--text);
+      border: 1px solid var(--hairline-strong);
+      color: var(--ink);
     }
 
     button.ghost:hover {
@@ -274,14 +277,14 @@
 
     button.danger {
       background: transparent;
-      border: 1px solid rgba(201, 106, 90, 0.5);
+      border: 1px solid rgba(156, 68, 51, 0.4);
       color: var(--rose);
       padding: 0.45rem 0.85rem;
       font-size: 0.8rem;
     }
 
     button.danger:hover {
-      background: rgba(201, 106, 90, 0.12);
+      background: rgba(156, 68, 51, 0.08);
       filter: none;
     }
 
@@ -297,16 +300,16 @@
       color: var(--text-dim);
       font-family: var(--sans);
       font-size: 0.86rem;
-      background: var(--ink-2);
-      border: 1px dashed var(--hairline);
+      background: var(--card);
+      border: 1px dashed var(--hairline-strong);
       border-radius: 2px;
       padding: 0.65rem 0.8rem;
     }
 
     input[type="file"]::file-selector-button {
-      background: var(--surface-2);
-      color: var(--text);
-      border: 1px solid var(--hairline);
+      background: var(--paper-2);
+      color: var(--ink);
+      border: 1px solid var(--hairline-strong);
       border-radius: 2px;
       padding: 0.4rem 0.7rem;
       margin-right: 0.75rem;
@@ -345,7 +348,7 @@
     .ledger-row .doc-name {
       font-family: var(--serif);
       font-size: 1.05rem;
-      color: var(--text);
+      color: var(--ink);
     }
 
     .empty-state {
@@ -360,11 +363,14 @@
     }
 
     .chunk-card {
-      background: var(--ink-2);
+      background: var(--card);
       border-left: 3px solid var(--amber);
       border-radius: 2px;
       padding: 0.9rem 1.05rem;
       margin-bottom: 0.75rem;
+      border-top: 1px solid var(--hairline);
+      border-right: 1px solid var(--hairline);
+      border-bottom: 1px solid var(--hairline);
     }
 
     .chunk-text {
@@ -388,7 +394,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(226, 161, 61, 0.25);
+      box-shadow: 0 8px 24px rgba(90, 60, 10, 0.22), 0 0 0 1px rgba(185, 121, 30, 0.18);
       cursor: pointer;
       z-index: 1000;
       padding: 0;
@@ -425,15 +431,15 @@
       position: fixed;
       bottom: 2.4rem;
       right: 5.6rem;
-      background: var(--surface-2);
-      border: 1px solid var(--hairline);
-      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--hairline-strong);
+      color: var(--ink);
       padding: 0.65rem 0.95rem;
       border-radius: 6px;
       font-size: 0.85rem;
       max-width: 220px;
       z-index: 999;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 6px 20px rgba(90, 70, 30, 0.14);
       animation: rise .5s ease .9s both;
     }
 
@@ -444,9 +450,9 @@
       bottom: 16px;
       width: 12px;
       height: 12px;
-      background: var(--surface-2);
-      border-right: 1px solid var(--hairline);
-      border-bottom: 1px solid var(--hairline);
+      background: var(--card);
+      border-right: 1px solid var(--hairline-strong);
+      border-bottom: 1px solid var(--hairline-strong);
       transform: rotate(-45deg);
     }
 
@@ -471,10 +477,10 @@
       width: 392px;
       max-width: calc(100vw - 2rem);
       height: min(600px, calc(100vh - 8.5rem));
-      background: linear-gradient(180deg, var(--surface), var(--ink-2));
-      border: 1px solid var(--hairline);
+      background: linear-gradient(180deg, var(--card), var(--paper-2));
+      border: 1px solid var(--hairline-strong);
       border-radius: 6px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 20px 60px rgba(70, 50, 10, 0.18);
       display: flex;
       flex-direction: column;
       z-index: 999;
@@ -494,7 +500,7 @@
     .chat-header {
       padding: 1rem 1.1rem 0.9rem;
       border-bottom: 1px solid var(--hairline);
-      background: rgba(0, 0, 0, 0.15);
+      background: rgba(90, 70, 30, 0.04);
     }
 
     .chat-header-top {
@@ -508,7 +514,7 @@
       font-family: var(--serif);
       font-size: 1.08rem;
       margin: 0;
-      color: var(--text);
+      color: var(--ink);
     }
 
     .chat-header .lamp {
@@ -518,7 +524,7 @@
       background: var(--amber);
       display: inline-block;
       margin-right: 0.5rem;
-      box-shadow: 0 0 8px 2px rgba(226, 161, 61, 0.6);
+      box-shadow: 0 0 8px 2px rgba(185, 121, 30, 0.35);
     }
 
     .chat-controls {
@@ -560,7 +566,7 @@
     }
 
     .chat-box::-webkit-scrollbar-thumb {
-      background: var(--hairline);
+      background: var(--hairline-strong);
       border-radius: 3px;
     }
 
@@ -575,17 +581,17 @@
 
     .chat-message.user {
       align-self: flex-end;
-      background: rgba(226, 161, 61, 0.16);
-      border: 1px solid rgba(226, 161, 61, 0.35);
-      color: var(--text);
+      background: var(--amber-wash);
+      border: 1px solid rgba(185, 121, 30, 0.3);
+      color: var(--ink);
       border-bottom-right-radius: 2px;
     }
 
     .chat-message.assistant {
       align-self: flex-start;
-      background: var(--surface-2);
+      background: var(--card);
       border: 1px solid var(--hairline);
-      color: var(--text);
+      color: var(--ink);
       border-bottom-left-radius: 2px;
     }
 
@@ -610,7 +616,7 @@
       display: flex;
       align-items: center;
       gap: 0.6rem;
-      background: var(--surface-2);
+      background: var(--card);
       border: 1px solid var(--hairline);
       border-bottom-left-radius: 2px;
       border-radius: 8px;
@@ -663,7 +669,7 @@
     .chat-input-row {
       padding: 0.85rem 1.1rem 1.05rem;
       border-top: 1px solid var(--hairline);
-      background: rgba(0, 0, 0, 0.15);
+      background: rgba(90, 70, 30, 0.04);
     }
 
     .chat-input-row .row {
@@ -768,13 +774,13 @@
   </div>
 
   <button id="chatFab" onclick="toggleChatPanel()" aria-label="Open chat assistant">
-    <svg class="ico-open" viewBox="0 0 24 24" fill="none" stroke="#241705" stroke-width="2" stroke-linecap="round"
+    <svg class="ico-open" viewBox="0 0 24 24" fill="none" stroke="#FCF6E9" stroke-width="2" stroke-linecap="round"
       stroke-linejoin="round">
       <path
         d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z">
       </path>
     </svg>
-    <svg class="ico-close" viewBox="0 0 24 24" fill="none" stroke="#241705" stroke-width="2" stroke-linecap="round"
+    <svg class="ico-close" viewBox="0 0 24 24" fill="none" stroke="#FCF6E9" stroke-width="2" stroke-linecap="round"
       stroke-linejoin="round">
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1233,6 +1239,14 @@
         alert("Delete failed: " + err.message);
       }
     }
+
+    // Send chat message on Enter (without needing the mouse)
+    document.getElementById("ragQuery").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        performStatefulChat();
+      }
+    });
 
     // Initial Load
     loadDocuments();
