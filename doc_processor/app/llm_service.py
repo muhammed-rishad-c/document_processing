@@ -82,6 +82,107 @@ _SUMMARY_FILLER_WORDS = {
     "all", "it", "thread", "file", "up", "with",
 }
 
+GREETING_RE = re.compile(
+    r"^\s*(?:hi|hello|hey|hiya|yo|howdy|greetings|good\s+(?:morning|afternoon|evening))[\s!.,]*$",
+    re.IGNORECASE,
+)
+THANKS_RE = re.compile(
+    r"^\s*(?:thanks|thank\s+you|thx|ty|ok(?:ay)?|cool|great|nice|got\s+it)[\s!.,]*$",
+    re.IGNORECASE,
+)
+SELF_INTRO_RE = re.compile(
+    r"\b(?:my\s+name\s+is|i\s*am|i'm|this\s+is|call\s+me)\s+([A-Z][a-zA-Z'-]{1,30})\b"
+)
+
+SMALLTALK_GREETING_REPLY = (
+    "Hi there! I'm the LiquidLab Assistant -- ask me anything about our services, "
+    "solutions, or company."
+)
+
+SMALLTALK_THANKS_REPLY = "You're welcome! Anything else I can help with?"
+
+REMEMBER_AS_RE = re.compile(
+    r"^\s*(?:remember|note|save)\s+(?:that\s+)?(.+?)\s+as\s+(.+?)[\s.!]*$",
+    re.IGNORECASE,
+)
+REMEMBER_DEF_RE = re.compile(
+    r"^\s*(?:remember|note|save)\s+(?:that\s+)?(.+?)\s+(?:means|stands\s+for|is)\s+(.+?)[\s.!]*$",
+    re.IGNORECASE,
+)
+
+def classify_smalltalk(query: str) -> dict:
+    """Cheap regex-only smalltalk / self-intro detector, mirroring
+    classify_summary_query. Runs before vector search + lead capture so a
+    bare 'hi' or 'my name is X' never falls through to NO_ANSWER_TEXT and
+    never triggers lead capture.
+
+    Returns {"is_smalltalk": bool, "reply": str|None, "memory_update": dict|None}.
+    memory_update can be set even when is_smalltalk is False (e.g. a real
+    question that happens to start with 'I'm Rishad, ...'), so the name is
+    still remembered without short-circuiting the real RAG answer.
+    """
+    text = (query or "").strip()
+    result = {"is_smalltalk": False, "reply": None, "memory_update": None}
+    if not text:
+        return result
+
+    intro_match = SELF_INTRO_RE.search(text)
+    intro_name = None
+    if intro_match:
+        intro_name = intro_match.group(1).strip().rstrip(".,!")
+        result["memory_update"] = {"visitor_name": intro_name}
+
+    if GREETING_RE.match(text):
+        result["is_smalltalk"] = True
+        result["reply"] = SMALLTALK_GREETING_REPLY
+        return result
+
+    if THANKS_RE.match(text):
+        result["is_smalltalk"] = True
+        result["reply"] = SMALLTALK_THANKS_REPLY
+        return result
+
+    if intro_name and len(text.split()) <= 8 and looks_like_new_question(text) is not True:
+        result["is_smalltalk"] = True
+        result["reply"] = f"Nice to meet you, {intro_name}! How can I help you today?"
+        return result
+
+    return result
+
+def _normalize_memory_key(raw_key: str) -> str:
+    key = re.sub(r"[^a-z0-9]+", "_", raw_key.strip().lower()).strip("_")
+    return key or raw_key.strip().lower()
+
+
+def classify_remember_command(query: str) -> dict | None:
+    """Detects explicit 'remember X as Y' / 'remember X means Y' style
+    instructions. Returns {"key", "display_key", "value"} or None. Checked
+    before smalltalk and before RAG so it never gets routed into vector
+    search or lead capture.
+
+    'remember camera guiding parking system as cgpa' -> key='cgpa',
+    value='camera guiding parking system' (short label -> meaning).
+    'remember cgpa means camera guiding parking system' -> same result,
+    other phrasing order.
+    """
+    text = (query or "").strip()
+    if not text:
+        return None
+
+    m = REMEMBER_AS_RE.match(text)
+    if m:
+        value, display_key = m.group(1).strip(), m.group(2).strip()
+        if value and display_key:
+            return {"key": _normalize_memory_key(display_key), "display_key": display_key, "value": value}
+
+    m = REMEMBER_DEF_RE.match(text)
+    if m:
+        display_key, value = m.group(1).strip(), m.group(2).strip()
+        if display_key and value:
+            return {"key": _normalize_memory_key(display_key), "display_key": display_key, "value": value}
+
+    return None
+
 
 def classify_summary_query(query: str) -> dict:
     
@@ -292,6 +393,7 @@ def generate_rag_answer_with_memory(
     user_query: str,
     retrieved_chunks: list[dict],
     chat_history: list[dict] | None = None,
+    session_facts: dict | None = None,   # NEW
 ) -> dict:
     chat_history = chat_history or []
 
@@ -303,6 +405,18 @@ def generate_rag_answer_with_memory(
     is_summary_query = classify_summary_query(user_query)["is_summary"]
 
     doc_context = context_str if context_str else "No specific document context found."
+
+    facts_block = ""
+    if session_facts:
+        facts_lines = "\n".join(f"- {k}: {v}" for k, v in session_facts.items())
+        facts_block = (
+            "\n--- FACTS THE VISITOR ASKED YOU TO REMEMBER THIS CONVERSATION ---\n"
+            f"{facts_lines}\n"
+            "Treat these as authoritative for this conversation, even if they are "
+            "not mentioned in the document context above. If the visitor's question "
+            "matches one of these facts (by name, abbreviation, or close paraphrase), "
+            "answer using it directly.\n"
+        )
 
     if is_summary_query:
         system_prompt = (
@@ -323,9 +437,11 @@ def generate_rag_answer_with_memory(
             "5. Do not add a closing summary sentence after a bulleted list — the list IS the answer, stop there.\n"
             "6. Do not include chunk tags, document IDs, or metadata inside the answer text.\n"
             "7. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
-            "8. If there is no document context or chat history available, reply EXACTLY with: "
+            "8. If there is no document context, chat history, or remembered fact that answers the question, "
+            "reply EXACTLY with: "
             f'"{NO_ANSWER_TEXT}"\n\n'
             f"--- DOCUMENT CONTEXT ---\n{doc_context}\n"
+            f"{facts_block}"
         )
     else:
         system_prompt = (
@@ -346,9 +462,11 @@ def generate_rag_answer_with_memory(
             "6. Do not add a closing summary sentence after a bulleted list — the list IS the answer, stop there.\n"
             "7. Do not cite chunk tags, doc IDs, or metadata inside the answer text.\n"
             "8. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
-            "9. If the answer cannot be found in the provided context or chat history, reply EXACTLY with: "
+            "9. If the answer cannot be found in the provided context, chat history, or remembered facts, "
+            "reply EXACTLY with: "
             f'"{NO_ANSWER_TEXT}"\n\n'
             f"--- DOCUMENT CONTEXT ---\n{doc_context}\n"
+            f"{facts_block}"
         )
 
     t_llm_start = time.perf_counter()
@@ -380,14 +498,12 @@ def generate_rag_answer_with_memory(
     ]
     cleaned_text = "\n".join(cleaned_lines).strip()
 
-    
     match = LEAD_IN_PATTERN.match(cleaned_text)
     if match:
         remainder = cleaned_text[match.end():].lstrip()
         if remainder:
             cleaned_text = remainder[0].upper() + remainder[1:]
 
-    
     lines = cleaned_text.splitlines()
     bullet_idx = [i for i, ln in enumerate(lines) if ln.strip().startswith(("- ", "* ", "\u2022 "))]
     if len(bullet_idx) > 6:

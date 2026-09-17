@@ -19,6 +19,7 @@ from .llm_service import (
     extract_lead_info, classify_query,
     resolve_standalone_query, 
     is_diverted_question,
+    classify_remember_command, classify_smalltalk,
     NO_ANSWER_TEXT
     )
 from .lead_export import append_lead
@@ -188,13 +189,14 @@ def _answer_with_rag(
         top_k=7,
         document_id=str(company.document_id),
         timing_out=stage_timings,
-    )
+    ) 
 
     try:
         llm_result = generate_rag_answer_with_memory(
             user_query=payload.query,
             retrieved_chunks=retrieved_chunks,
             chat_history=history_payload,
+            session_facts=session.session_memory or None,
         )
     except Exception:
         request.state.stage_timings = stage_timings
@@ -324,6 +326,41 @@ def widget_chat(
         raise HTTPException(status_code=401, detail="This session is no longer active.")
 
     _check_origin_and_allow(request, response, company)
+    
+    if not session.awaiting_lead_capture:
+        remember_cmd = classify_remember_command(payload.query)
+        if remember_cmd:
+            memory = dict(session.session_memory or {})
+            memory[remember_cmd["key"]] = remember_cmd["value"]
+            session.session_memory = memory
+            db.add(session)
+
+            ack_text = (
+                f"Got it — I'll remember that {remember_cmd['display_key']} "
+                f"means \"{remember_cmd['value']}\"."
+            )
+            user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+            assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=ack_text)
+            db.add_all([user_msg, assistant_msg])
+            db.commit()
+            return WidgetChatResponse(session_id=payload.session_id, answer=ack_text)
+
+        smalltalk = classify_smalltalk(payload.query)
+        if smalltalk["memory_update"]:
+            memory = dict(session.session_memory or {})
+            memory.update(smalltalk["memory_update"])
+            session.session_memory = memory
+            db.add(session)
+
+        if smalltalk["is_smalltalk"]:
+            user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+            assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=smalltalk["reply"])
+            db.add_all([user_msg, assistant_msg])
+            db.commit()
+            return WidgetChatResponse(session_id=payload.session_id, answer=smalltalk["reply"])
+
+        if smalltalk["memory_update"]:
+            db.commit()
 
     if session.awaiting_lead_capture:
         stage_timings: dict = {}
