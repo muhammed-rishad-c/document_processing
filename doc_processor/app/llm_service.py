@@ -91,9 +91,9 @@ THANKS_RE = re.compile(
     re.IGNORECASE,
 )
 SELF_INTRO_RE = re.compile(
-    r"\b(?:my\s+name\s+is|i\s*am|i'm|this\s+is|call\s+me)\s+([A-Z][a-zA-Z'-]{1,30})\b"
+    r"\b(?:my\s+name\s+is|i\s*am|i'm|this\s+is|call\s+me)\s+([a-zA-Z][a-zA-Z'-]{1,30})\b",
+    re.IGNORECASE,
 )
-
 SMALLTALK_GREETING_REPLY = (
     "Hi there! I'm the LiquidLab Assistant -- ask me anything about our services, "
     "solutions, or company."
@@ -125,11 +125,11 @@ def classify_smalltalk(query: str) -> dict:
     result = {"is_smalltalk": False, "reply": None, "memory_update": None}
     if not text:
         return result
-
+    
     intro_match = SELF_INTRO_RE.search(text)
     intro_name = None
     if intro_match:
-        intro_name = intro_match.group(1).strip().rstrip(".,!")
+        intro_name = intro_match.group(1).strip().rstrip(".,!").capitalize()
         result["memory_update"] = {"visitor_name": intro_name}
 
     if GREETING_RE.match(text):

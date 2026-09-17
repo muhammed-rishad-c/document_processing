@@ -262,7 +262,7 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500,detail=f"Chunk processing error: {str(e)}")
     
-    
+     
     saved_path = os.path.join(UPLOAD_DIR, f"{doc.id}_{file.filename}")
     with open(saved_path, "wb") as f:
         f.write(file_bytes)
