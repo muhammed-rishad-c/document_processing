@@ -110,6 +110,74 @@ REMEMBER_DEF_RE = re.compile(
     re.IGNORECASE,
 )
 
+CHAT_SUMMARY_HINT_RE = re.compile(
+    r"\b(this\s+chat|our\s+chat|the\s+chat|conversation|this\s+session|"
+    r"we\s+(talked|discussed)|talked\s+about|so\s+far)\b",
+    re.IGNORECASE,
+)
+
+SUMMARY_TARGET_PROMPT = (
+    "The user sent a message containing a summarization request. Decide if they "
+    "want a summary of THIS CONVERSATION/CHAT (what was discussed between user "
+    "and assistant), or a summary of DOCUMENT CONTENT (a chapter, topic, or "
+    "subject from a knowledge base/document).\n\n"
+    "Respond with ONLY a JSON object, no other text, no markdown fences, "
+    'in exactly this shape: {{"target": "chat" or "document"}}.\n\n'
+    "Message: {message}"
+)
+
+def classify_summary_target(query: str) -> str:
+    """Only called when classify_summary_query() already detected a summary
+    trigger word. Decides 'chat' vs 'document'. Regex hint first (cheap,
+    catches obvious phrasing); LLM fallback for ambiguous cases so it stays
+    dynamic instead of keyword-only."""
+    if CHAT_SUMMARY_HINT_RE.search(query or ""):
+        return "chat"
+    try:
+        ai_message = llm.invoke(SUMMARY_TARGET_PROMPT.format(message=query))
+        raw = ai_message.content.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = _json.loads(raw)
+        if isinstance(parsed, dict) and parsed.get("target") in ("chat", "document"):
+            return parsed["target"]
+    except Exception as e:
+        print(f"[classify_summary_target] failed, defaulting to document: {e}")
+    return "document"
+
+
+CHAT_SUMMARY_PROMPT = (
+    "Summarize this conversation as a short, scannable list. Rules:\n"
+    "1. One bullet per topic/question, in chronological order.\n"
+    "2. Each bullet: bolded topic name, then ONE short phrase (under 12 words) "
+    "of what was covered. No sub-explanations, no restating full details.\n"
+    "3. Cap at 8 bullets max. If more topics exist, keep the 8 most relevant "
+    "and end with 'Ask if you'd like detail on any topic.'\n"
+    "4. Do not repeat contact info, technical breakdowns, or lists verbatim — "
+    "just name that the topic was discussed.\n\n"
+    "PRIOR SUMMARY (already-condensed earlier turns):\n{prior_summary}\n\n"
+    "RECENT MESSAGES (verbatim):\n{recent_messages}\n\n"
+    "Respond with ONLY the bullet list, no preamble."
+)
+
+def generate_chat_summary(chat_history: list[dict], running_summary: str = "") -> str:
+    """Dedicated chat-level summary — bypasses RAG/doc context entirely.
+    Uses full history (not last-4 window) so nothing recent gets skipped."""
+    recent_text = "\n".join(
+        f"{'User' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')}"
+        for m in chat_history
+    )
+    try:
+        ai_message = llm.invoke(
+            CHAT_SUMMARY_PROMPT.format(
+                prior_summary=running_summary or "(none)",
+                recent_messages=recent_text or "(none)",
+            )
+        )
+        return ai_message.content.strip()
+    except Exception as e:
+        print(f"[generate_chat_summary] failed: {e}")
+        return running_summary or "I couldn't generate a summary right now."
+
 def classify_smalltalk(query: str) -> dict:
     """Cheap regex-only smalltalk / self-intro detector, mirroring
     classify_summary_query. Runs before vector search + lead capture so a
@@ -223,30 +291,63 @@ def _to_lc_messages(history: list[dict]) -> list:
     return lc_messages
 
 
-def reduce_chat_history(chat_history: list[dict], max_history_tokens: int = 1200) -> list[dict]:
-    if not chat_history:
-        return []
+SUMMARY_MERGE_PROMPT = (
+    "Update the running summary of this conversation by folding in the new "
+    "messages below. Keep all names, facts, numbers, decisions, and remembered "
+    "items. Be concise but do not drop details.\n\n"
+    "EXISTING SUMMARY:\n{existing_summary}\n\n"
+    "NEW MESSAGES:\n{new_messages}\n\n"
+    "Respond with ONLY the updated summary text, no preamble."
+)
 
-    total_tokens = sum(count_token(msg.get("content", "")) for msg in chat_history)
-    if total_tokens <= max_history_tokens:
-        return chat_history
+def update_and_get_history(
+    chat_history: list[dict],
+    existing_summary: str = "",
+    summarized_count: int = 0,
+    keep_last: int = 4,
+) -> tuple[str, int, list[dict]]:
+    """Returns (updated_summary, new_summarized_count, reduced_history).
+    Only the messages that aged out since the last call are folded into
+    the summary via one LLM call — not re-summarizing the whole history."""
+    if len(chat_history) <= keep_last:
+        return existing_summary, summarized_count, chat_history
 
-    recent_messages = chat_history[-4:]
-    older_messages = chat_history[:-4]
+    older = chat_history[:-keep_last]
+    recent = chat_history[-keep_last:]
+    new_msgs = older[summarized_count:]
 
-    if older_messages:
-        summary_lines = []
-        for msg in older_messages:
-            role_label = "User" if msg.get("role") == "user" else "Assistant"
-            snippet = msg.get("content", "")[:120].replace("\n", " ")
-            summary_lines.append(f"{role_label}: {snippet}...")
-
-        condensed_text = (
-            "[Prior Conversation Summary Block]:\n" + "\n".join(summary_lines)
+    if not new_msgs:
+        updated_summary = existing_summary
+    else:
+        new_text = "\n".join(
+            f"{'User' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')}"
+            for m in new_msgs
         )
-        return [{"role": "assistant", "content": condensed_text}] + recent_messages
+        try:
+            ai_message = llm.invoke(
+                SUMMARY_MERGE_PROMPT.format(
+                    existing_summary=existing_summary or "(none yet)",
+                    new_messages=new_text,
+                )
+            )
+            updated_summary = ai_message.content.strip()
+        except Exception as e:
+            print(f"[update_and_get_history] summary merge failed, keeping old summary: {e}")
+            updated_summary = existing_summary
 
-    return recent_messages
+    if count_token(updated_summary) > 800:
+        try:
+            ai_message = llm.invoke(
+                f"Compress this conversation summary further, keeping all names, "
+                f"facts, and numbers, cutting only redundant wording:\n\n{updated_summary}"
+            )
+            updated_summary = ai_message.content.strip()
+        except Exception as e:
+            print(f"[update_and_get_history] compression failed, keeping summary as-is: {e}")
+
+    new_count = len(older)
+    reduced = ([{"role": "assistant", "content": f"[Conversation summary]: {updated_summary}"}] if updated_summary else []) + recent
+    return updated_summary, new_count, reduced
 
 
 def build_safe_context(
@@ -290,6 +391,7 @@ REQUEST_TERMS = (
     "can you", "could you", "do you", "does it", "is it", "are you",
     "tell me", "explain", "show me", "help with", "reset", "cancel",
     "change", "update", "fix", "support", "pricing", "cost", "price", "refund",
+    "summar", "recap", "our chat", "this chat", "conversation",
 )
 
 EXTRACTION_PROMPT = (
@@ -393,12 +495,16 @@ def generate_rag_answer_with_memory(
     user_query: str,
     retrieved_chunks: list[dict],
     chat_history: list[dict] | None = None,
-    session_facts: dict | None = None,   # NEW
+    session_facts: dict | None = None,
+    session_summary: str | None = None,
+    session_summary_count: int | None = None,
 ) -> dict:
     chat_history = chat_history or []
 
     t_ctx_start = time.perf_counter()
-    reduced_history = reduce_chat_history(chat_history)
+    updated_summary, new_summarized_count, reduced_history = update_and_get_history(
+        chat_history, session_summary or "", session_summary_count or 0
+    )
     context_str, context_tokens = build_safe_context(retrieved_chunks, user_query, reduced_history)
     t_ctx_end = time.perf_counter()
 
@@ -524,6 +630,8 @@ def generate_rag_answer_with_memory(
         "context_prep_ms": round((t_ctx_end - t_ctx_start) * 1000, 2),
         "llm_generation_ms": round((t_llm_end - t_llm_start) * 1000, 2),
         "model_used": model_used,
+        "updated_summary": updated_summary,
+        "summarized_count": new_summarized_count,
     }
     
 

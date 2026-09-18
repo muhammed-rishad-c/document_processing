@@ -20,6 +20,7 @@ from .llm_service import (
     resolve_standalone_query, 
     is_diverted_question,
     classify_remember_command, classify_smalltalk,
+    classify_summary_query, classify_summary_target, generate_chat_summary,
     NO_ANSWER_TEXT
     )
 from .lead_export import append_lead
@@ -88,16 +89,7 @@ def get_company_from_api_key(
 
 
 def _load_pending_lead(session: ChatSession) -> dict:
-    """Parses the JSON blob stored in pending_lead_query into
-    {"question", "resolved_question", "category_name", "name", "email", "phone"}.
-    Never raises — falls back to an empty shell if the field is missing or
-    somehow malformed, so a bad/old value can't crash the request.
-    category_name defaults to None for old-shape blobs saved before this
-    field existed; it gets resolved to the company's default department at
-    Lead-creation time, not here. resolved_question falls back to the raw
-    "question" value for blobs saved before this field existed, so an
-    in-flight session that straddles this deploy never surfaces None to
-    Excel/DB/email."""
+    
     empty = {
         "question": "",
         "resolved_question": "",
@@ -146,13 +138,7 @@ def _get_active_departments(db: Session, company_id) -> list[CompanyDepartment]:
 
 
 def _resolve_department(db: Session, company: Company, category_name: str | None):
-    """Resolves a classified category name to a real, active department for
-    this company. Falls back to the company's default department if
-    category_name is None or doesn't match any active department —
-    guarantees a lead is never left without a deliverable destination.
-    Note: v1 has no standalone department update/deactivate endpoints
-    (create-with-company only), so is_active can't change post-creation yet —
-    a default with is_active=False can't currently occur."""
+    
     departments = _get_active_departments(db, company.id)
 
     if category_name:
@@ -184,6 +170,15 @@ def _answer_with_rag(
     )
     history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
 
+    if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
+        unsummarized = history_payload[session.summarized_count:]
+        answer_text = generate_chat_summary(unsummarized, session.running_summary or "")
+        user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+        assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
+        db.add_all([user_msg, assistant_msg])
+        db.commit()
+        return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
+
     retrieved_chunks = search_similar_chunks(
         query_text=payload.query,
         top_k=7,
@@ -192,11 +187,14 @@ def _answer_with_rag(
     ) 
 
     try:
+            
         llm_result = generate_rag_answer_with_memory(
             user_query=payload.query,
             retrieved_chunks=retrieved_chunks,
             chat_history=history_payload,
             session_facts=session.session_memory or None,
+            session_summary=session.running_summary,
+            session_summary_count=session.summarized_count,
         )
     except Exception:
         request.state.stage_timings = stage_timings
@@ -273,9 +271,12 @@ def _answer_with_rag(
             db.add(session)
             answer_text = LEAD_CAPTURE_PROMPT
 
+    session.running_summary = llm_result.get("updated_summary", session.running_summary)
+    session.summarized_count = llm_result.get("summarized_count", session.summarized_count)
+
     user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
     assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
-    db.add_all([user_msg, assistant_msg])
+    db.add_all([user_msg, assistant_msg, session])
     db.commit()
 
     request.state.stage_timings = stage_timings
@@ -326,7 +327,7 @@ def widget_chat(
         raise HTTPException(status_code=401, detail="This session is no longer active.")
 
     _check_origin_and_allow(request, response, company)
-    
+
     if not session.awaiting_lead_capture:
         remember_cmd = classify_remember_command(payload.query)
         if remember_cmd:
@@ -361,6 +362,23 @@ def widget_chat(
 
         if smalltalk["memory_update"]:
             db.commit()
+
+        if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
+            all_messages = (
+                db.query(ChatMessage)
+                .filter(ChatMessage.session_id == payload.session_id)
+                .order_by(ChatMessage.created_at.asc())
+                .all()
+            )
+            history_payload = [{"role": m.role, "content": m.content} for m in all_messages]
+            unsummarized = history_payload[session.summarized_count:]
+            answer_text = generate_chat_summary(unsummarized, session.running_summary or "")
+
+            user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+            assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
+            db.add_all([user_msg, assistant_msg])
+            db.commit()
+            return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
 
     if session.awaiting_lead_capture:
         stage_timings: dict = {}
@@ -433,7 +451,7 @@ def widget_chat(
                     db.add(lead_row)
                     db.commit()
             except Exception as e:
-                
+
                 print(f"[widget_chat] Unexpected error during lead notification: {e}")
 
             return WidgetChatResponse(session_id=payload.session_id, answer=LEAD_CAPTURE_THANK_YOU)
@@ -472,5 +490,4 @@ def widget_chat(
 
             return WidgetChatResponse(session_id=payload.session_id, answer=reprompt_text)
 
-    
     return _answer_with_rag(request, db, session, company, payload)

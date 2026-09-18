@@ -46,6 +46,8 @@ class ChatSession(Base):
     captured_phone = Column(String, nullable=True)
     
     session_memory = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    running_summary = Column(Text, nullable=False, default="", server_default="")
+    summarized_count = Column(Integer, nullable=False, default=0, server_default="0")
 
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
     company = relationship("Company", back_populates="chat_sessions")\

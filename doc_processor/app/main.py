@@ -57,7 +57,9 @@ from .vector_store import (
   
 from .llm_service import(
     generate_rag_answer_with_memory,
-    classify_summary_query
+    classify_summary_query,
+    classify_summary_target,
+    generate_chat_summary
 )
 
 from slowapi import _rate_limit_exceeded_handler
@@ -457,6 +459,22 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
 
     history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
 
+    if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
+        unsummarized = history_payload[session.summarized_count:]
+        answer_text = generate_chat_summary(unsummarized, session.running_summary or "")
+
+        user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+        assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
+        db.add_all([user_msg, assistant_msg])
+        db.commit()
+
+        return MemoryRAGResponse(
+            session_id=payload.session_id,
+            query=payload.query,
+            answer=answer_text,
+            sources=[]
+        )
+
     try:
         stage_timings: dict = {}
         target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
@@ -474,7 +492,9 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
         llm_result = generate_rag_answer_with_memory(
             user_query=payload.query,
             retrieved_chunks=retrieved_chunks,
-            chat_history=history_payload
+            chat_history=history_payload,
+            session_summary=session.running_summary,
+            session_summary_count=session.summarized_count,
         )
         stage_timings["context_prep_ms"] = llm_result.get("context_prep_ms", 0)
         stage_timings["llm_generation_ms"] = llm_result.get("llm_generation_ms", 0)
@@ -499,8 +519,10 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
         role="assistant",
         content=llm_result["text"]
     )
-    
-    db.add_all([user_msg, assistant_msg])
+
+    session.running_summary = llm_result.get("updated_summary", session.running_summary)
+    session.summarized_count = llm_result.get("summarized_count", session.summarized_count)
+    db.add_all([user_msg, assistant_msg, session])
     db.commit() 
 
     formatted_sources = [
@@ -518,4 +540,4 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
         query=payload.query,
         answer=llm_result["text"],
         sources=formatted_sources
-    ) 
+    )

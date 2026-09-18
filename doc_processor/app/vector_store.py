@@ -105,7 +105,7 @@ def search_similar_chunks(query_text: str,
     query_filter = None
     if document_id and str(document_id).strip().lower() not in ["", "null", "undefined", "none"]:
         query_filter = Filter(
-            must=[
+            must=[  
                 FieldCondition(
                     key="metadata.document_id",
                     match=MatchValue(value=str(document_id).strip())
