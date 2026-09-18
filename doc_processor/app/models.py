@@ -14,6 +14,7 @@ class Document(Base):
     upload_time = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     extracted_text = Column(Text, nullable=False)
     stats = Column(JSONB, nullable=False)
+    structure = Column(JSONB, nullable=True) 
     
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
     

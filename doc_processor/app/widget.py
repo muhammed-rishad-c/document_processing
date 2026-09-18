@@ -7,7 +7,7 @@ from fastapi import Request
 from slowapi.util import get_remote_address
 
 from .database import get_db
-from .models import ChatSession, ChatMessage, Company, Lead, CompanyDepartment
+from .models import ChatSession, ChatMessage, Company, Lead, CompanyDepartment,Document
 from .schemas import (
     WidgetSessionCreate,
     ChatSessionResponse,
@@ -21,6 +21,7 @@ from .llm_service import (
     is_diverted_question,
     classify_remember_command, classify_smalltalk,
     classify_summary_query, classify_summary_target, generate_chat_summary,
+    classify_structural_query, answer_structural_query,  
     NO_ANSWER_TEXT
     )
 from .lead_export import append_lead
@@ -169,6 +170,17 @@ def _answer_with_rag(
         .all()
     )
     history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
+    
+    structural = classify_structural_query(payload.query)
+    if structural["is_structural"]:
+        doc = db.query(Document).filter(Document.id == company.document_id).first()
+        answer_text = answer_structural_query(structural["kind"], doc.structure if doc else None)
+        user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+        assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
+        db.add_all([user_msg, assistant_msg])
+        db.commit()
+        return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
+
 
     if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
         unsummarized = history_payload[session.summarized_count:]

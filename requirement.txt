@@ -21,4 +21,4 @@ playwright
 patchright
 slowapi
 openpyxl
-
+langchain-pymupdf4llm

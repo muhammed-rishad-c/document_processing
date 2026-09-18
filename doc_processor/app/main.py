@@ -43,7 +43,8 @@ from .service import (
     extract_text_from_file, 
     calculate_document_stats,
     chunk_text,
-    generate_chunk_token_sequence_csv
+    generate_chunk_token_sequence_csv,
+    extract_document_structure
 
 )   
 from .vector_store import (
@@ -59,7 +60,9 @@ from .llm_service import(
     generate_rag_answer_with_memory,
     classify_summary_query,
     classify_summary_target,
-    generate_chat_summary
+    generate_chat_summary,
+    classify_structural_query,   
+    answer_structural_query 
 )
 
 from slowapi import _rate_limit_exceeded_handler
@@ -192,12 +195,15 @@ async def upload_document(
         stats = calculate_document_stats(text)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+    structure = extract_document_structure(file_bytes, file.filename)
        
     doc = Document(
             filename=file.filename,
             file_type=file_type,
             extracted_text=text,
-            stats=stats
+            stats=stats,
+            structure=structure 
         ) 
     
     try:
@@ -344,16 +350,22 @@ def semantic_search(request: SemanticSearchRequest):
     
 
 @app.post("/documents/chat",response_model=RAGResponse)
-def chat_with_document(payload:RAGRequest,request:Request):
+def chat_with_document(payload:RAGRequest,request:Request,db: Session = Depends(get_db)):
     try:
+        structural = classify_structural_query(payload.query)
+        if structural["is_structural"]:
+            doc = db.query(Document).filter(Document.id == payload.document_id).first() if payload.document_id else None
+            answer_text = answer_structural_query(structural["kind"], doc.structure if doc else None)
+            return RAGResponse(query=payload.query, answer=answer_text, sources=[])
+
         stage_timings: dict = {}
         chunks=search_similar_chunks(
             query_text=payload.query,
             top_k=payload.top_k,
             document_id=payload.document_id,
             timing_out=stage_timings
-            
         )
+        
         
         if not chunks:
             request.state.stage_timings = stage_timings
@@ -462,6 +474,27 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
     if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
         unsummarized = history_payload[session.summarized_count:]
         answer_text = generate_chat_summary(unsummarized, session.running_summary or "")
+
+        user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+        assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
+        db.add_all([user_msg, assistant_msg])
+        db.commit()
+
+        return MemoryRAGResponse(
+            session_id=payload.session_id,
+            query=payload.query,
+            answer=answer_text,
+            sources=[]
+        )
+        
+    target_doc_id = payload.document_id or (str(session.document_id) if session.document_id else None)
+    structural = classify_structural_query(payload.query)
+    if structural["is_structural"]: 
+        if not target_doc_id:
+            answer_text = "I'm not sure which document you mean — this chat isn't tied to one document. Could you specify which one you're asking about?"
+        else:
+            doc = db.query(Document).filter(Document.id == target_doc_id).first()
+            answer_text = answer_structural_query(structural["kind"], doc.structure if doc else None)
 
         user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
         assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)

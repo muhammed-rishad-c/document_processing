@@ -116,6 +116,31 @@ CHAT_SUMMARY_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 
+STRUCTURAL_TRIGGER_RE = re.compile(
+    r"\b(how many (chapters?|sections?|pages?)|"
+    r"table of contents|toc|"
+    r"list (all )?(the )?chapters?|"
+    r"how long is (this|the) (document|book|pdf)|"
+    r"page count|word count|"
+    r"what('s| is) in (this|the) (document|book))\b",
+    re.IGNORECASE,
+)
+
+
+def classify_structural_query(query: str) -> dict:
+    
+    if not query or not STRUCTURAL_TRIGGER_RE.search(query):
+        return {"is_structural": False, "kind": None}
+
+    lower = query.lower()
+    if "page" in lower and "chapter" not in lower:
+        kind = "page_count"
+    elif "toc" in lower or "table of contents" in lower or "list" in lower:
+        kind = "toc"
+    else:
+        kind = "chapter_count"
+    return {"is_structural": True, "kind": kind}
+
 SUMMARY_TARGET_PROMPT = (
     "The user sent a message containing a summarization request. Decide if they "
     "want a summary of THIS CONVERSATION/CHAT (what was discussed between user "
@@ -160,8 +185,7 @@ CHAT_SUMMARY_PROMPT = (
 )
 
 def generate_chat_summary(chat_history: list[dict], running_summary: str = "") -> str:
-    """Dedicated chat-level summary — bypasses RAG/doc context entirely.
-    Uses full history (not last-4 window) so nothing recent gets skipped."""
+    
     recent_text = "\n".join(
         f"{'User' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')}"
         for m in chat_history
@@ -179,16 +203,7 @@ def generate_chat_summary(chat_history: list[dict], running_summary: str = "") -
         return running_summary or "I couldn't generate a summary right now."
 
 def classify_smalltalk(query: str) -> dict:
-    """Cheap regex-only smalltalk / self-intro detector, mirroring
-    classify_summary_query. Runs before vector search + lead capture so a
-    bare 'hi' or 'my name is X' never falls through to NO_ANSWER_TEXT and
-    never triggers lead capture.
-
-    Returns {"is_smalltalk": bool, "reply": str|None, "memory_update": dict|None}.
-    memory_update can be set even when is_smalltalk is False (e.g. a real
-    question that happens to start with 'I'm Rishad, ...'), so the name is
-    still remembered without short-circuiting the real RAG answer.
-    """
+    
     text = (query or "").strip()
     result = {"is_smalltalk": False, "reply": None, "memory_update": None}
     if not text:
@@ -223,16 +238,7 @@ def _normalize_memory_key(raw_key: str) -> str:
 
 
 def classify_remember_command(query: str) -> dict | None:
-    """Detects explicit 'remember X as Y' / 'remember X means Y' style
-    instructions. Returns {"key", "display_key", "value"} or None. Checked
-    before smalltalk and before RAG so it never gets routed into vector
-    search or lead capture.
-
-    'remember camera guiding parking system as cgpa' -> key='cgpa',
-    value='camera guiding parking system' (short label -> meaning).
-    'remember cgpa means camera guiding parking system' -> same result,
-    other phrasing order.
-    """
+    
     text = (query or "").strip()
     if not text:
         return None
@@ -274,12 +280,32 @@ def classify_summary_query(query: str) -> dict:
 
     return {"is_summary": True, "mode": "targeted", "search_query": query}
 
+def answer_structural_query(kind: str, structure: dict | None) -> str:
+    
+    if not structure or structure.get("source") == "none":
+        return "I couldn't find a table of contents or chapter structure for this document."
+
+    source = structure.get("source")
+    hedge = " (based on formatting, not an explicit table of contents)" if source in ("font_heuristic", "regex") else ""
+
+    if kind == "chapter_count":
+        n = structure.get("chapter_count", 0)
+        return f"This document has {n} chapters{hedge}."
+
+    if kind == "toc":
+        titles = [c["title"] for c in structure.get("chapters", [])]
+        listed = "\n".join(f"- {t}" for t in titles[:20])
+        more = "\n\n(Showing first 20.)" if len(titles) > 20 else ""
+        return f"Table of contents{hedge}:\n{listed}{more}"
+
+    if kind == "page_count":
+        return f"This document has {structure.get('page_count', 'an unknown number of')} pages."
+
+    return "I couldn't determine that from the document structure."
+
 
 def _to_lc_messages(history: list[dict]) -> list:
-    """Converts our plain role/content dicts into LangChain message objects.
-    Passed via MessagesPlaceholder rather than string-templated, so message
-    content is never re-parsed for {..} placeholders — safe even if a past
-    turn happens to contain literal braces."""
+    
     lc_messages = []
     for msg in history:
         role = msg.get("role")
