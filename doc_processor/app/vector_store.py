@@ -1,6 +1,7 @@
 import uuid
 import time
 import os
+import json as _json_dbg
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -11,6 +12,9 @@ encoder = HuggingFaceEmbeddings(model_name=MODEL_PATH)
 
 qdrant = QdrantClient(host="localhost", port=6333)
 COLLECTION_NAME = "document_chunks"
+
+DEBUG_CHUNKS_PATH = os.path.join(os.path.dirname(__file__), "debug_last_chunks.json")
+
 
  
 def init_qdrant():
@@ -36,6 +40,13 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
     --- this is purely additive for the upload path. Preserves input order,
     so zip(chunks, embeddings) stays correctly aligned."""
     return encoder.embed_documents(texts)
+
+def dump_chunks_for_debug(query_text: str, results: list[dict]) -> None:
+    try:
+        with open(DEBUG_CHUNKS_PATH, "w", encoding="utf-8") as f:
+            _json_dbg.dump({"query": query_text, "results": results}, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[dump_chunks_for_debug] failed: {e}")
 
 
 # Lazy singleton: created on first use, not at import time, so it doesn't
@@ -140,4 +151,6 @@ def search_similar_chunks(query_text: str,
             "token_count": int(metadata.get("token_count", 0)),
             "similarity_score": round(float(score), 4),
         })
+        
+    dump_chunks_for_debug(query_text, results)
     return results
