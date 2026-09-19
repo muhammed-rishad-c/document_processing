@@ -4,7 +4,6 @@ import time
 from uuid import UUID
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status, Request, BackgroundTasks
 from fastapi import APIRouter,Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse,Response
 from sqlalchemy.orm import Session
@@ -42,11 +41,10 @@ from .schemas import (
 from .service import (
     extract_text_from_file, 
     calculate_document_stats,
-    chunk_text,
+    chunk_text_parent_child,
     generate_chunk_token_sequence_csv,
     extract_document_structure
-
-)   
+)  
 from .vector_store import (
     init_qdrant,
     get_embeddings_batch,
@@ -65,8 +63,7 @@ from .llm_service import(
     answer_structural_query 
 )
 
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
+
 from .rate_limit import limiter
 
 from .widget import router as widget_router
@@ -179,8 +176,6 @@ async def upload_document(
         background_tasks: BackgroundTasks,
         file: UploadFile = File(...),
         db: Session = Depends(get_db),
-        chunk_size:int=600,
-        chunk_overlap:int=50
     ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
@@ -219,43 +214,48 @@ async def upload_document(
        
         
     try:
-        raw_chunks=chunk_text(text=text,max_chunk_size=chunk_size,chunk_overlap=chunk_overlap)
+        raw_chunks = chunk_text_parent_child(text=text)
     except ValueError as e:
-        raise HTTPException(status_code=400,detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     t_proc_end = time.perf_counter()
     
     token_csv_path = os.path.join(UPLOAD_DIR, f"{doc.id}_chunk_tokens.csv")
     background_tasks.add_task(_run_chunk_token_sequence_report, raw_chunks, token_csv_path, doc.id)
     
-    db_chunks=[]
-    vector_data=[]
+    db_chunks = []
+    vector_data = []
     
     t_embed_start = time.perf_counter()
     
-    chunk_texts = [c["chunk_text"] for c in raw_chunks]
+    child_chunks = [c for c in raw_chunks if not c["is_parent"]]
+    chunk_texts = [c["chunk_text"] for c in child_chunks]
     chunk_embeddings = get_embeddings_batch(chunk_texts) if chunk_texts else []
+    embeddings_by_index = {c["chunk_index"]: emb for c, emb in zip(child_chunks, chunk_embeddings)}
 
-    for c, chunk_embedding in zip(raw_chunks, chunk_embeddings):
-        chunk_uuid=uuid.uuid4()
-        
-        db_chunk=DocumentChunk(
+    for c in raw_chunks:
+        chunk_uuid = uuid.uuid4()
+
+        db_chunks.append(DocumentChunk(
             id=chunk_uuid,
             document_id=doc.id,
-            chunk_index=c['chunk_index'],
+            chunk_index=c["chunk_index"],
             chunk_text=c["chunk_text"],
-            token_count=c["token_count"]
-        )
-        
-        db_chunks.append(db_chunk)
-        
-        vector_data.append({
-            "point_id": chunk_uuid,
-            "document_id": doc.id,
-            "chunk_index": c["chunk_index"],
-            "chunk_text": c["chunk_text"],
-            "token_count": c["token_count"],
-            "embedding": chunk_embedding
-        })
+            token_count=c["token_count"],
+            is_parent=c["is_parent"],
+            parent_index=c["parent_index"],
+        ))
+
+        if not c["is_parent"]:
+            vector_data.append({
+                "point_id": chunk_uuid,
+                "document_id": doc.id,
+                "chunk_index": c["chunk_index"],
+                "chunk_text": c["chunk_text"],
+                "token_count": c["token_count"],
+                "parent_index": c["parent_index"],
+                "is_parent": False,
+                "embedding": embeddings_by_index[c["chunk_index"]],
+            })
     t_embed_end = time.perf_counter()
 
     request.state.stage_timings = {
@@ -328,7 +328,7 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
     } 
 
 @app.post("/documents/search", response_model=SemanticSearchResponse)
-def semantic_search(request: SemanticSearchRequest):
+def semantic_search(request: SemanticSearchRequest, db: Session = Depends(get_db)):
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="Search query cannot be empty.")
 
@@ -338,7 +338,8 @@ def semantic_search(request: SemanticSearchRequest):
         results = search_similar_chunks(
             query_text=request.query,
             top_k=request.top_k,
-            document_id=doc_id_str
+            document_id=doc_id_str,
+            db_session=db
         )
         
         return {
@@ -363,6 +364,7 @@ def chat_with_document(payload:RAGRequest,request:Request,db: Session = Depends(
             query_text=payload.query,
             top_k=payload.top_k,
             document_id=payload.document_id,
+            db_session=db,
             timing_out=stage_timings
         )
         
@@ -519,6 +521,7 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
             query_text=search_query,
             top_k=payload.top_k,
             document_id=target_doc_id,
+            db_session=db,
             timing_out=stage_timings
         ) 
 

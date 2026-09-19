@@ -195,8 +195,9 @@ def _answer_with_rag(
         query_text=payload.query,
         top_k=7,
         document_id=str(company.document_id),
+        db_session=db,
         timing_out=stage_timings,
-    ) 
+    )
 
     try:
             

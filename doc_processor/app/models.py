@@ -26,8 +26,14 @@ class DocumentChunk(Base):
     chunk_index = Column(Integer, nullable=False)  
     chunk_text = Column(Text, nullable=False)
     token_count = Column(Integer, nullable=False)
+    is_parent = Column(Boolean, nullable=False, default=False, server_default="false")
+    parent_index = Column(Integer, nullable=True)
 
     document = relationship("Document", back_populates="chunks")
+    
+    __table_args__ = (
+        Index("ix_document_chunk_doc_parent", "document_id", "parent_index"),
+    )
     
 class ChatSession(Base):
     __tablename__ = "chat_sessions"

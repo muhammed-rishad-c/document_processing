@@ -1,13 +1,11 @@
-import io
+
 import re
 import csv
 import tiktoken
-import os,uuid
+import os
 
 from collections import Counter
 import pymupdf as fitz
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_pymupdf4llm import PyMuPDF4LLMLoader
 import tempfile
@@ -225,35 +223,11 @@ def calculate_document_stats(text: str) -> dict:
         raise ValueError(f"Failed to calculate document statistics: {str(e)}")
 
 
-def search_text_in_document(text: str, query: str) -> dict:
-    try:
-        if not query or not query.strip():
-            raise ValueError("Search query cannot be empty.")
-            
-        query_lower = query.lower()
-        occurrences = len(re.findall(re.escape(query_lower), text.lower()))
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        matching_sentences = [
-            s.strip() for s in sentences if query_lower in s.lower()
-        ]
-        
-        return {
-            "query": query,
-            "occurrences": occurrences,
-            "matching_sentences": matching_sentences
-        }
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"error occurred during search execution: {str(e)}")
-
-
 def count_token(text:str)->int:
     return len(tokenizer.encode(text))
 
 def generate_chunk_token_sequence_csv(chunks: list[dict], output_path: str) -> dict:
 
-    import csv
     if not chunks:
         raise ValueError("Cannot generate token report for an empty chunk list.")
     rows = []
@@ -288,6 +262,57 @@ def generate_chunk_token_sequence_csv(chunks: list[dict], output_path: str) -> d
         "total_token_rows": len(rows),
         "output_path": output_path,
     }
+    
+def chunk_text_parent_child(
+    text: str,
+    parent_chunk_size: int = 900,
+    parent_overlap: int = 100,
+    child_chunk_size: int = 250,
+    child_overlap: int = 30,
+) -> list[dict]:
+    
+    if not text.strip():
+        return []
+
+    parent_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        encoding_name=TOKENIZER_ENCODING,
+        chunk_size=parent_chunk_size,
+        chunk_overlap=parent_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+    child_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        encoding_name=TOKENIZER_ENCODING,
+        chunk_size=child_chunk_size,
+        chunk_overlap=child_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+
+    parent_blocks = parent_splitter.split_text(text)
+
+    results: list[dict] = []
+    child_idx = 0
+
+    for parent_idx, parent_block in enumerate(parent_blocks):
+        results.append({
+            "chunk_index": parent_idx,
+            "chunk_text": parent_block,
+            "token_count": count_token(parent_block),
+            "is_parent": True,
+            "parent_index": None,
+        })
+
+        child_texts = child_splitter.split_text(parent_block)
+        for child_text in child_texts:
+            results.append({
+                "chunk_index": child_idx,
+                "chunk_text": child_text,
+                "token_count": count_token(child_text),
+                "is_parent": False,
+                "parent_index": parent_idx,
+            })
+            child_idx += 1
+
+    return results
 
 def chunk_text(text: str, max_chunk_size: int = 600, chunk_overlap: int = 50) -> list[dict]:
     if not text.strip():

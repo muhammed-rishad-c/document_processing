@@ -6,6 +6,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore
+from .models import DocumentChunk        
+from .service import count_token  
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "all-MiniLM-L6-v2")
 encoder = HuggingFaceEmbeddings(model_name=MODEL_PATH)
@@ -33,12 +35,7 @@ def get_embedding(text: str) -> list[float]:
 
 
 def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
-    """Encodes multiple texts in a single batched call via LangChain's
-    HuggingFaceEmbeddings wrapper (still backed by SentenceTransformer
-    internally, so batching behavior is unchanged). Does not change
-    get_embedding() or any of its existing callers (e.g. search_similar_chunks)
-    --- this is purely additive for the upload path. Preserves input order,
-    so zip(chunks, embeddings) stays correctly aligned."""
+    
     return encoder.embed_documents(texts)
 
 def dump_chunks_for_debug(query_text: str, results: list[dict]) -> None:
@@ -49,9 +46,7 @@ def dump_chunks_for_debug(query_text: str, results: list[dict]) -> None:
         print(f"[dump_chunks_for_debug] failed: {e}")
 
 
-# Lazy singleton: created on first use, not at import time, so it doesn't
-# race against init_qdrant() (which runs in FastAPI's startup event and
-# must create the collection before this wraps it).
+
 _vectorstore = None
 
 
@@ -69,6 +64,8 @@ def _get_vectorstore() -> QdrantVectorStore:
 def store_chunk_vector(chunks_data: list[dict]):
     points = []
     for chunk in chunks_data:
+        if chunk.get("is_parent"):
+            continue  
         try:
             point_id = str(uuid.UUID(str(chunk["point_id"])))
         except ValueError:
@@ -82,13 +79,15 @@ def store_chunk_vector(chunks_data: list[dict]):
                     "metadata": {
                         "document_id": str(chunk["document_id"]),
                         "chunk_index": int(chunk["chunk_index"]),
+                        "parent_index": int(chunk["parent_index"]),
                         "token_count": int(chunk["token_count"]),
                         "chunk_id": point_id,
                     },
                 },
             )
         )
-    qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
+    if points:
+        qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
 
 
 def delete_vector(doc_id: str):
@@ -105,9 +104,12 @@ def delete_vector(doc_id: str):
     )
 
 
+PARENT_CONTEXT_BUDGET = 2500  
+
 def search_similar_chunks(query_text: str,
-                           top_k: int = 7,
+                           top_k: int = 10,
                            document_id: str = None,
+                           db_session=None,
                            timing_out: dict | None = None) -> list[dict]:
     t_embed_start = time.perf_counter()
     query_vector = get_embedding(query_text)
@@ -140,17 +142,51 @@ def search_similar_chunks(query_text: str,
         timing_out["query_embedding_ms"] = round((t_embed_end - t_embed_start) * 1000, 2)
         timing_out["vector_search_ms"] = round((t_search_end - t_search_start) * 1000, 2)
 
+    seen_parents = set()
     results = []
+    total_tokens = 0
     for doc, score in scored_docs:
         metadata = doc.metadata or {}
+        parent_idx = metadata.get("parent_index")
+        if parent_idx is None or parent_idx in seen_parents:
+            continue
+        if db_session is None:
+            print("[search_similar_chunks] no db_session provided, cannot resolve parent — skipping hit")
+            continue
+        parent_text = fetch_parents_by_index(
+            db_session, str(metadata.get("document_id", "")), [parent_idx]
+        ).get(parent_idx)
+        if not parent_text:
+            continue
+        parent_tokens = count_token(parent_text)
+        if total_tokens + parent_tokens > PARENT_CONTEXT_BUDGET:
+            break
+        seen_parents.add(parent_idx)
+        total_tokens += parent_tokens
         results.append({
             "chunk_id": str(metadata.get("chunk_id", "")),
             "document_id": str(metadata.get("document_id", "")),
-            "chunk_index": int(metadata.get("chunk_index", 0)),
-            "chunk_text": doc.page_content,
-            "token_count": int(metadata.get("token_count", 0)),
+            "chunk_index": int(parent_idx),
+            "chunk_text": parent_text,
+            "token_count": parent_tokens,
             "similarity_score": round(float(score), 4),
         })
-        
+
     dump_chunks_for_debug(query_text, results)
     return results
+
+
+def fetch_parents_by_index(db_session, document_id: str, parent_indices: list[int]) -> dict[int, str]:
+    
+    if not parent_indices:
+        return {}
+    rows = (
+        db_session.query(DocumentChunk)
+        .filter(
+            DocumentChunk.document_id == document_id,
+            DocumentChunk.is_parent == True,
+            DocumentChunk.chunk_index.in_(parent_indices),
+        )
+        .all()
+    )
+    return {row.chunk_index: row.chunk_text for row in rows}
