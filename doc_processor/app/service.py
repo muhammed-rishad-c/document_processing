@@ -1,4 +1,3 @@
-
 import re
 import csv
 import tiktoken
@@ -7,8 +6,6 @@ import os
 from collections import Counter
 import pymupdf as fitz
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_pymupdf4llm import PyMuPDF4LLMLoader
-import tempfile
 
 
 TOKENIZER_ENCODING="cl100k_base"
@@ -74,63 +71,36 @@ def _normalize_title_for_match(title: str) -> str:
     )
     return normalized.replace("'", "")
 
-HEADING_LINE_RE = re.compile(r"^#{1,3}\s+(.+)$", re.MULTILINE)
-MARKDOWN_EMPHASIS_RE = re.compile(r"^\*{1,3}(.+?)\*{1,3}$")
-CHAPTER_NUMBERED_RE = re.compile(r"^chapter\s+\d+", re.IGNORECASE) 
+def _extract_tier3_llm_structure(extracted_text: str, page_count: int | None) -> dict:
+    """Tier 3 fallback: infer chapter/section structure with an LLM when
+    Tier 1 (embedded TOC) fails, or for non-PDF documents that have no
+    Tier 1 at all.
 
+    This is a thin wrapper: it delegates to the existing chapter-list
+    generation logic in llm_service.py, reusing the already-extracted
+    document text rather than re-extracting it. Imported locally to avoid
+    a circular import between service.py and llm_service.py.
+    """
+    from .llm_service import generate_chapter_list_llm_from_text
 
-def _extract_tier2_font_headings(file_bytes: bytes, page_count: int) -> dict:
-    
-    tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(file_bytes)
-            tmp_path = tmp.name
+        result = generate_chapter_list_llm_from_text(extracted_text)
 
-        loader = PyMuPDF4LLMLoader(tmp_path)
-        docs = loader.load()
-        full_markdown = "\n".join(d.page_content for d in docs)
-
-        candidates = []
-        for match in HEADING_LINE_RE.finditer(full_markdown):
-            title = match.group(1).strip()
-            if not title:
-                continue
-
-            emphasis_match = MARKDOWN_EMPHASIS_RE.match(title)
-            if emphasis_match:
-                title = emphasis_match.group(1).strip()
-
-            if not title:
-                continue
-            if STRUCTURAL_EXCLUDE_RE.match(_normalize_title_for_match(title)):
-                continue
-
-            candidates.append({"title": title, "page": None})
-        
-        numbered = [c for c in candidates if CHAPTER_NUMBERED_RE.match(c["title"])]
-        if numbered and len(numbered) >= len(candidates) / 2:
-            candidates = numbered
-
-        if not candidates:
-            return {
-                "source": "none",
-                "page_count": page_count,
-                "raw_toc": [],
-                "chapters": [],
-                "chapter_count": 0,
-            }
+        chapters = [
+            {"title": title, "page": None}
+            for title in result.get("chapters", [])
+        ]
 
         return {
-            "source": "font_heuristic",
+            "source": "llm_inferred" if chapters else "none",
             "page_count": page_count,
             "raw_toc": [],
-            "chapters": candidates,
-            "chapter_count": len(candidates),
+            "chapters": chapters,
+            "chapter_count": len(chapters),
         }
 
     except Exception as e:
-        print(f"[_extract_tier2_font_headings] failed: {e}")
+        print(f"[_extract_tier3_llm_structure] failed: {e}")
         return {
             "source": "none",
             "page_count": page_count,
@@ -138,63 +108,90 @@ def _extract_tier2_font_headings(file_bytes: bytes, page_count: int) -> dict:
             "chapters": [],
             "chapter_count": 0,
         }
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception as cleanup_err:
-                print(f"[_extract_tier2_font_headings] temp file cleanup failed: {cleanup_err}")
 
 
 def extract_document_structure(file_bytes: bytes, filename: str) -> dict:
-    
-    if not filename.endswith(".pdf"):
+    """Tier 1 (embedded PDF TOC) ONLY.
+
+    Tier 2 (font-size heading heuristics via PyMuPDF4LLMLoader) has been
+    removed: on real documents it routinely mistakes decorative front-matter
+    text, "(Continued)"/"(Cont.)" markers, and back-matter as new chapters,
+    since it has no way to distinguish "styled like a heading" from
+    "actually a new section." See llm_service.py's Tier 3 prompt, which
+    does that disambiguation instead.
+
+    This is deliberately synchronous and does NOT call the LLM — it is meant
+    to run inline during the upload request. Tier 1 is local/fast/free, so
+    there's no latency reason to defer it.
+
+    If Tier 1 finds nothing (or the file isn't a PDF at all), this returns
+    a "none" result. The caller (main.py's upload endpoint) uses that
+    "none" as the signal to schedule Tier 3 (LLM inference) as a background
+    task via needs_tier3_llm_fallback(), rather than blocking the upload
+    response on an LLM call.
+    """
+
+    if filename.endswith(".pdf"):
+        try:
+            with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+                page_count = doc.page_count
+                raw_toc_entries = doc.get_toc()
+        except Exception as e:
+            print(f"[extract_document_structure] failed to open PDF: {e}")
+            page_count = None
+            raw_toc_entries = []
+
+        raw_toc = [
+            {"level": level, "title": title, "page": page}
+            for level, title, page in raw_toc_entries
+        ]
+
+        # -----------------------------
+        # Tier 1: Embedded PDF TOC
+        # -----------------------------
+        if raw_toc:
+            top_level_entries = [e for e in raw_toc if e["level"] == 1]
+            candidates = top_level_entries if top_level_entries else raw_toc
+
+            chapters = [
+                {"title": e["title"], "page": e["page"]}
+                for e in candidates
+                if not STRUCTURAL_EXCLUDE_RE.match(_normalize_title_for_match(e["title"]))
+            ]
+
+            return {
+                "source": "toc",
+                "page_count": page_count,
+                "raw_toc": raw_toc,
+                "chapters": chapters,
+                "chapter_count": len(chapters),
+            }
+
+        # No embedded TOC: Tier 2 has been removed, so this falls straight
+        # through to "none", which needs_tier3_llm_fallback() picks up.
         return {
             "source": "none",
-            "page_count": None,
-            "raw_toc": [],
+            "page_count": page_count,
+            "raw_toc": raw_toc,
             "chapters": [],
             "chapter_count": 0,
         }
 
-    try:
-        with fitz.open(stream=file_bytes, filetype="pdf") as doc:
-            page_count = doc.page_count
-            raw_toc_entries = doc.get_toc()
-    except Exception as e:
-        print(f"[extract_document_structure] failed to open PDF: {e}")
-        return {
-            "source": "none",
-            "page_count": None,
-            "raw_toc": [],
-            "chapters": [],
-            "chapter_count": 0,
-        }
-
-    raw_toc = [
-        {"level": level, "title": title, "page": page}
-        for level, title, page in raw_toc_entries
-    ]
-
-    if not raw_toc:
-        return _extract_tier2_font_headings(file_bytes, page_count)
-
-    top_level_entries = [e for e in raw_toc if e["level"] == 1]
-    candidates = top_level_entries if top_level_entries else raw_toc
-
-    chapters = [
-        {"title": e["title"], "page": e["page"]}
-        for e in candidates
-        if not STRUCTURAL_EXCLUDE_RE.match(_normalize_title_for_match(e["title"]))
-    ]
-
+    # TXT or other non-PDF text-based document: Tier 1/Tier 2 don't apply.
     return {
-        "source": "toc",
-        "page_count": page_count,
-        "raw_toc": raw_toc,
-        "chapters": chapters,
-        "chapter_count": len(chapters),
+        "source": "none",
+        "page_count": None,
+        "raw_toc": [],
+        "chapters": [],
+        "chapter_count": 0,
     }
+
+
+def needs_tier3_llm_fallback(structure: dict) -> bool:
+    """True when Tier 1 found nothing and Tier 3 (LLM, run in the
+    background) should be scheduled. Centralized here so main.py doesn't
+    need to know the internal shape of a "none" result."""
+    return bool(structure) and structure.get("source") == "none"
 
 def calculate_document_stats(text: str) -> dict:
     try:
@@ -335,7 +332,3 @@ def chunk_text(text: str, max_chunk_size: int = 600, chunk_overlap: int = 50) ->
         }
         for idx, chunk in enumerate(raw_chunks)
     ]
-    
-    
-    
-

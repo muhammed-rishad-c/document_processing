@@ -14,7 +14,7 @@ from slowapi.errors import RateLimitExceeded
 
 from . import analytics
 from . import feedback
-from .database import engine, Base, get_db
+from .database import engine, Base, get_db, Sessionlocal
 from .models import (  
     Document,
     DocumentChunk,
@@ -43,7 +43,9 @@ from .service import (
     calculate_document_stats,
     chunk_text_parent_child,
     generate_chunk_token_sequence_csv,
-    extract_document_structure
+    extract_document_structure,
+    needs_tier3_llm_fallback,
+    _extract_tier3_llm_structure,
 )  
 from .vector_store import (
     init_qdrant,
@@ -152,6 +154,40 @@ def _run_chunk_token_sequence_report(chunks: list[dict], output_path: str, doc_i
     except Exception as e:
         print(f"[background] WARNING: failed to generate chunk token sequence CSV "
               f"for doc {doc_id}: {str(e)}")
+
+
+def _run_tier3_structure_background(doc_id, extracted_text: str, page_count) -> None:
+    """Runs Tier 3 (LLM chapter inference) after the upload response has
+    already been sent, then persists the result onto Document.structure.
+
+    Uses its own DB session (Sessionlocal) rather than the request-scoped
+    `db` from get_db(), because that session is closed as soon as the
+    request finishes — long before this background task runs.
+
+    Never raises: a failed/slow LLM must not affect document ingestion,
+    which has already succeeded by the time this runs.
+    """
+    try:
+        structure = _extract_tier3_llm_structure(extracted_text, page_count)
+    except Exception as e:
+        print(f"[background] Tier 3 structure extraction crashed for doc {doc_id}: {e}")
+        return
+
+    db = Sessionlocal()
+    try:
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if doc is None:
+            print(f"[background] Tier 3 finished but doc {doc_id} no longer exists, discarding result")
+            return
+        doc.structure = structure
+        db.add(doc)
+        db.commit()
+        print(f"[background] Tier 3 structure stored for doc {doc_id}: source={structure.get('source')}")
+    except Exception as e:
+        db.rollback()
+        print(f"[background] Failed to persist Tier 3 structure for doc {doc_id}: {e}")
+    finally:
+        db.close()
          
         
 @app.get("/analytics")
@@ -191,6 +227,11 @@ async def upload_document(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+    # Tier 1 (embedded TOC) only — fast, local, no LLM calls, safe to run
+    # inline in the request. Tier 2 (font heuristics) was removed: it was
+    # unreliable on real documents (miscounted "(Continued)" markers and
+    # front/back matter as new chapters). Any document without an embedded
+    # TOC now falls straight through to "none" and picks up Tier 3 below.
     structure = extract_document_structure(file_bytes, file.filename)
        
     doc = Document(
@@ -210,6 +251,20 @@ async def upload_document(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500,detail=f"Database error: {str(e)}")
+
+    # Tier 3 (LLM inference) only runs when Tier 1 found nothing (no
+    # embedded TOC), or the document is a non-PDF that skips Tier 1 entirely.
+    # It's scheduled
+    # as a background task — it needs 2-9 LLM calls, and the upload response
+    # shouldn't wait on that. Document.structure gets updated in place once
+    # it finishes; until then it stays "none".
+    if needs_tier3_llm_fallback(structure):
+        background_tasks.add_task(
+            _run_tier3_structure_background,
+            doc.id,
+            text,
+            structure.get("page_count"),
+        )
     
        
         

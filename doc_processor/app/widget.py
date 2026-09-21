@@ -19,9 +19,11 @@ from .llm_service import (
     extract_lead_info, classify_query,
     resolve_standalone_query, 
     is_diverted_question,
-    classify_remember_command, classify_smalltalk,
+    classify_remember_command, classify_conversational_intent,
+    is_greeting_or_thanks, is_lead_worthy_question,
     classify_summary_query, classify_summary_target, generate_chat_summary,
-    classify_structural_query, answer_structural_query,  
+    classify_structural_query, answer_structural_query,
+    MAX_SESSION_MEMORY_KEYS,
     NO_ANSWER_TEXT
     )
 from .lead_export import append_lead
@@ -49,6 +51,11 @@ LEAD_CAPTURE_THANK_YOU = (
 )
 LEAD_CAPTURE_GIVE_UP = (
     "No problem — feel free to ask me anything else in the meantime!"
+)
+NO_MATCH_SOFT_REPLY = (
+    "I'm not sure I caught that one. I can help with questions about "
+    "{company} — our services, solutions, or how to get in touch. "
+    "What would you like to know?"
 )
 AUTO_LEAD_FORWARDED_TEXT = (
     "I couldn't find that in our docs, but I've passed it along to our team — "
@@ -221,7 +228,11 @@ def _answer_with_rag(
 
     answer_text = llm_result["text"]
 
-    if answer_text == NO_ANSWER_TEXT:
+    if answer_text == NO_ANSWER_TEXT and not is_lead_worthy_question(payload.query):
+        
+        answer_text = NO_MATCH_SOFT_REPLY.format(company=company.name)
+
+    elif answer_text == NO_ANSWER_TEXT:
         t0 = time.perf_counter()
         resolved_query = resolve_standalone_query(payload.query, history_payload)
         stage_timings["resolve_standalone_query_ms"] = round((time.perf_counter() - t0) * 1000, 2)
@@ -345,23 +356,38 @@ def widget_chat(
         remember_cmd = classify_remember_command(payload.query)
         if remember_cmd:
             memory = dict(session.session_memory or {})
-            memory[remember_cmd["key"]] = remember_cmd["value"]
-            session.session_memory = memory
-            db.add(session)
 
-            ack_text = (
-                f"Got it — I'll remember that {remember_cmd['display_key']} "
-                f"means \"{remember_cmd['value']}\"."
-            )
+            if remember_cmd["key"] not in memory and len(memory) >= MAX_SESSION_MEMORY_KEYS:
+                ack_text = (
+                    "I've already got quite a few things remembered for this chat, "
+                    "so I can't add another one right now."
+                )
+            else:
+                memory[remember_cmd["key"]] = remember_cmd["value"]
+                session.session_memory = memory
+                db.add(session)
+
+                ack_text = (
+                    f"Got it — I'll remember that {remember_cmd['display_key']} "
+                    f"means \"{remember_cmd['value']}\"."
+                )
+
             user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
             assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=ack_text)
             db.add_all([user_msg, assistant_msg])
             db.commit()
             return WidgetChatResponse(session_id=payload.session_id, answer=ack_text)
 
-        smalltalk = classify_smalltalk(payload.query)
-        if smalltalk["memory_update"]:
-            memory = dict(session.session_memory or {})
+        existing_memory = session.session_memory or {}
+        smalltalk = classify_conversational_intent(
+            payload.query,
+            company_name=company.name,
+            visitor_name=existing_memory.get("visitor_name"),
+            is_first_turn=False,  # session/create already sent GREETING_TEXT
+        )
+
+        if smalltalk["memory_update"] and smalltalk["is_smalltalk"]:
+            memory = dict(existing_memory)
             memory.update(smalltalk["memory_update"])
             session.session_memory = memory
             db.add(session)
@@ -372,9 +398,6 @@ def widget_chat(
             db.add_all([user_msg, assistant_msg])
             db.commit()
             return WidgetChatResponse(session_id=payload.session_id, answer=smalltalk["reply"])
-
-        if smalltalk["memory_update"]:
-            db.commit()
 
         if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
             all_messages = (
@@ -396,6 +419,22 @@ def widget_chat(
     if session.awaiting_lead_capture:
         stage_timings: dict = {}
         pending = _load_pending_lead(session)
+
+        stripped_query = (payload.query or "").strip()
+        if is_greeting_or_thanks(stripped_query):
+            if not pending["name"] and not pending["email"]:
+                reprompt_text = LEAD_CAPTURE_REPROMPT_MISSING_BOTH
+            elif not pending["name"]:
+                reprompt_text = LEAD_CAPTURE_REPROMPT_MISSING_NAME
+            else:
+                reprompt_text = LEAD_CAPTURE_REPROMPT_MISSING_EMAIL
+
+            user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+            assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=reprompt_text)
+            db.add_all([user_msg, assistant_msg])
+            db.commit()
+
+            return WidgetChatResponse(session_id=payload.session_id, answer=reprompt_text)
 
         t0 = time.perf_counter()
         extracted = extract_lead_info(payload.query)
