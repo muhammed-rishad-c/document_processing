@@ -62,7 +62,8 @@ from .llm_service import(
     classify_summary_target,
     generate_chat_summary,
     classify_structural_query,   
-    answer_structural_query 
+    answer_structural_query,
+    classify_conversational_intent_dynamic
 )
 
 
@@ -408,6 +409,15 @@ def semantic_search(request: SemanticSearchRequest, db: Session = Depends(get_db
 @app.post("/documents/chat",response_model=RAGResponse)
 def chat_with_document(payload:RAGRequest,request:Request,db: Session = Depends(get_db)):
     try:
+        # No session here, so there's nothing to persist (no visitor_name
+        # memory, no "last assistant message" for context) — but the
+        # classifier still works fine without it, it just leans more on the
+        # message itself. Real questions are unaffected; this only ever
+        # returns early for greetings/thanks/farewells/etc.
+        smalltalk = classify_conversational_intent_dynamic(payload.query)
+        if smalltalk["is_smalltalk"]:
+            return RAGResponse(query=payload.query, answer=smalltalk["reply"], sources=[])
+
         structural = classify_structural_query(payload.query)
         if structural["is_structural"]:
             doc = db.query(Document).filter(Document.id == payload.document_id).first() if payload.document_id else None
@@ -527,6 +537,34 @@ def chat_with_memory(payload: MemoryRAGRequest, db: Session = Depends(get_db),re
     )
 
     history_payload = [{"role": msg.role, "content": msg.content} for msg in all_messages]
+
+    # Reuses the history we already loaded above for the "last assistant
+    # message" context — no extra DB query needed here, unlike widget.py.
+    existing_memory = session.session_memory or {}
+    smalltalk = classify_conversational_intent_dynamic(
+        payload.query,
+        chat_history=history_payload,
+        visitor_name=existing_memory.get("visitor_name"),
+        is_first_turn=False,
+    )
+    if smalltalk["is_smalltalk"]:
+        if smalltalk["memory_update"]:
+            memory = dict(existing_memory)
+            memory.update(smalltalk["memory_update"])
+            session.session_memory = memory
+            db.add(session)
+
+        user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+        assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=smalltalk["reply"])
+        db.add_all([user_msg, assistant_msg])
+        db.commit()
+
+        return MemoryRAGResponse(
+            session_id=payload.session_id,
+            query=payload.query,
+            answer=smalltalk["reply"],
+            sources=[]
+        )
 
     if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
         unsummarized = history_payload[session.summarized_count:]

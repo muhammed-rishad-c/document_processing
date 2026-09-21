@@ -105,23 +105,51 @@ _OPT_GREET = rf"(?:{_GREET_WORD}\s+)?"
 
 GREETING_RE = re.compile(rf"{_GREET_WORD}{_GREET_TAIL}", re.IGNORECASE)
 
-_THANKS_WORD = (
-    r"(?:thanks|thank you|thank u|thankyou|thx|tysm|ty|ok|okay|k|kk|cool|"
-    r"great|nice|awesome|perfect|excellent|got it|understood|sure|alright|"
-    r"fine|good|sounds good|makes sense|helpful|that helps|very helpful|"
-    r"a lot|so much|man|mate|bro|buddy)"
+# "Core" words unambiguously signal gratitude/farewell on their own.
+# "Ack" words (ok, sure, good, fine, no...) are too overloaded with normal
+# conversational meaning to trigger a terminal reply by themselves — e.g.
+# the bot's own "Ask if you'd like the full list" can legitimately be
+# answered with a bare "sure" or "no", and that must NOT be read as
+# gratitude or a goodbye. Ack words only count when paired with a core word.
+_THANKS_CORE = (
+    r"(?:thanks|thank you|thank u|thankyou|thx|tysm|ty|"
+    r"helpful|that helps|very helpful|a lot|so much)"
 )
+_THANKS_ACK = (
+    r"(?:ok|okay|k|kk|cool|great|nice|awesome|perfect|excellent|got it|"
+    r"understood|sure|alright|fine|good|sounds good|makes sense|man|mate|"
+    r"bro|buddy)"
+)
+_THANKS_TOKEN = rf"(?:{_THANKS_CORE}|{_THANKS_ACK})"
+# Fullmatch requires at least one CORE token to appear somewhere in the run.
 THANKS_RE = re.compile(
-    rf"{_OPT_GREET}{_THANKS_WORD}(?:\s+{_THANKS_WORD})*",
+    rf"{_OPT_GREET}(?:{_THANKS_TOKEN}\s+)*{_THANKS_CORE}(?:\s+{_THANKS_TOKEN})*",
     re.IGNORECASE,
 )
 
-FAREWELL_RE = re.compile(
-    rf"{_OPT_GREET}(?:bye|byee|bye bye|goodbye|good bye|see you|see ya|cya|"
-    r"catch you later|talk later|later|gtg|got to go|have a good (?:day|one)|"
+_FAREWELL_CORE = (
+    r"(?:bye|byee|bye bye|goodbye|good bye|see you|see ya|cya|"
+    r"catch you later|talk later|gtg|got to go|have a good (?:day|one)|"
     r"i m done|im done|we re done|that s all|thats all|that s it|thats it|"
-    r"nothing else|no thanks|no thank you|nope|no|i m good|im good|all good|"
-    r"nothing for now|maybe later)(?:\s+(?:for now|thanks|then))?",
+    r"nothing else|no thanks|no thank you|nothing for now)"
+)
+# Bare "no"/"nope"/"fine"/"good"/"later"/"i m good" etc. removed as
+# standalone triggers — they're real answers as often as they're goodbyes.
+FAREWELL_RE = re.compile(
+    rf"{_OPT_GREET}{_FAREWELL_CORE}(?:\s+(?:for now|thanks|then))?",
+    re.IGNORECASE,
+)
+
+# THANKS_RE/FAREWELL_RE above are deliberately narrow: a false positive
+# there produces a wrong terminal-sounding reply mid-conversation (the bug
+# we're fixing). But two other call sites want the OPPOSITE tradeoff —
+# is_greeting_or_thanks() (lead-capture: "is this just filler, not a real
+# answer, so re-prompt for free") and is_lead_worthy_question() (the
+# lead-capture gate) both treat a false positive as harmless, so they keep
+# the old, broader ack/farewell word list.
+_LENIENT_FILLER_WORD = rf"(?:{_THANKS_TOKEN}|no|nope|i m good|im good|all good|later|maybe later)"
+LENIENT_FILLER_RE = re.compile(
+    rf"{_OPT_GREET}{_LENIENT_FILLER_WORD}(?:\s+{_LENIENT_FILLER_WORD})*",
     re.IGNORECASE,
 )
 
@@ -329,7 +357,21 @@ def classify_conversational_intent(
       memory_update - dict to merge into session_memory, or None
     """
     result = {"intent": "none", "is_smalltalk": False, "reply": None, "memory_update": None}
+    raw_stripped = (query or "").strip()
     text = _normalize_conversational(query)
+
+    # Message had real characters (emoji, "!!", a thumbs-up) but normalizes
+    # to nothing — it's a pure reaction, not a real question. Answer it for
+    # free instead of burning a vector search + LLM call on empty content.
+    if raw_stripped and not text:
+        result["intent"] = "reaction"
+        result["is_smalltalk"] = True
+        result["reply"] = random.choice([
+            "Glad to help! Anything else you'd like to know?",
+            "👍 Let me know if you have any questions!",
+        ])
+        return result
+
     if not text:
         return result
 
@@ -406,12 +448,116 @@ def classify_conversational_intent(
     return result
 
 
+CONVO_INTENT_PROMPT = (
+    "You are looking at one short visitor message in a company support chat widget.\n"
+    "The assistant's PREVIOUS message (if any) is given for context, because short "
+    "replies like \"no\", \"sure\", \"ok\" only make sense next to what they're answering.\n\n"
+    "Classify the visitor's NEW message as exactly one of:\n"
+    "- greeting - hello/hi with no other content\n"
+    "- thanks - expressing gratitude\n"
+    "- farewell - clearly ending the conversation (not just declining one offer)\n"
+    "- affirm - agreeing to / accepting something the assistant just offered or asked, "
+    "wanting to continue (e.g. \"yes\", \"sure\", answered a follow-up offer positively)\n"
+    "- decline - declining something the assistant just offered, but NOT ending the chat "
+    "(e.g. \"no\" in answer to \"want more detail?\")\n"
+    "- other - a real question, statement, or anything needing the knowledge base\n\n"
+    "Respond with ONLY JSON, no markdown fences: "
+    '{{"intent": "greeting|thanks|farewell|affirm|decline|other"}}\n\n'
+    "Assistant's previous message: {last_assistant}\n"
+    "Visitor's new message: {message}"
+)
+
+
+def classify_conversational_intent_dynamic(
+    query: str,
+    chat_history: list[dict] | None = None,
+    company_name: str | None = None,
+    visitor_name: str | None = None,
+    is_first_turn: bool = False,
+) -> dict:
+    """Two-tier smalltalk classifier.
+
+    Tier 1: the deterministic regex path above (free, catches the clear
+    majority of greetings/thanks/farewells/self-intros with zero latency).
+
+    Tier 2: only reached when tier 1 found nothing AND the message is short
+    (<=6 words). Real questions are long enough that they never make it
+    here, so this never adds latency to normal RAG queries. This tier calls
+    the LLM with the assistant's last message as context, which is the only
+    way to correctly resolve context-dependent one-word replies like "no"
+    or "sure" that a regex can't safely classify on its own (see the
+    THANKS_RE/FAREWELL_RE tightening above for why those were pulled out of
+    the deterministic path).
+    """
+    fast = classify_conversational_intent(query, company_name, visitor_name, is_first_turn)
+    if fast["intent"] != "none":
+        return fast
+
+    text = _normalize_conversational(query)
+    if not text or len(text.split()) > 6:
+        return fast
+
+    last_assistant = ""
+    if chat_history:
+        for msg in reversed(chat_history):
+            if msg.get("role") == "assistant":
+                last_assistant = msg.get("content", "")
+                break
+
+    try:
+        ai_message = llm.invoke(
+            CONVO_INTENT_PROMPT.format(last_assistant=last_assistant or "(none)", message=query)
+        )
+        raw = ai_message.content.strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = _json.loads(raw)
+        intent = parsed.get("intent") if isinstance(parsed, dict) else None
+    except Exception as e:
+        print(f"[classify_conversational_intent_dynamic] LLM fallback failed, treating as real query: {e}")
+        return fast
+
+    company = company_name or "our"
+
+    if intent == "greeting":
+        return {
+            "intent": "greeting", "is_smalltalk": True, "memory_update": None,
+            "reply": f"Hey{_who(visitor_name)}! What would you like to know about {company}?",
+        }
+    if intent == "thanks":
+        return {
+            "intent": "thanks", "is_smalltalk": True, "memory_update": None,
+            "reply": "You're welcome! Anything else I can help with?",
+        }
+    if intent == "farewell":
+        return {
+            "intent": "farewell", "is_smalltalk": True, "memory_update": None,
+            "reply": f"Thanks for stopping by{_who(visitor_name)} — come back any time!",
+        }
+    if intent == "decline":
+        # Explicitly NOT a farewell — the visitor is just passing on one
+        # offer (e.g. "want the full list?"), not ending the conversation.
+        return {
+            "intent": "decline", "is_smalltalk": True, "memory_update": None,
+            "reply": "No problem! Let me know if anything else comes up.",
+        }
+    if intent == "affirm":
+        # We don't have the previous offer's payload cached here, so we
+        # can't literally "expand the list" — but we can avoid embedding a
+        # near-empty query like "yes" and instead invite the specific ask.
+        return {
+            "intent": "affirm", "is_smalltalk": True, "memory_update": None,
+            "reply": "Sure — what would you like the detail on?",
+        }
+
+    return fast  # intent == "other" (or unrecognized) -> let RAG handle it
+
+
 def is_greeting_or_thanks(query: str) -> bool:
     """Used during lead capture, where a greeting must re-prompt, not reset."""
     text = _normalize_conversational(query)
     return bool(text) and bool(
         GREETING_RE.fullmatch(text)
-        or THANKS_RE.fullmatch(text)
+        or LENIENT_FILLER_RE.fullmatch(text)
         or FAREWELL_RE.fullmatch(text)
     )
 
@@ -818,7 +964,7 @@ def is_lead_worthy_question(query: str) -> bool:
     if not normalized:
         return False
 
-    for pattern in (GREETING_RE, THANKS_RE, FAREWELL_RE, IDENTITY_RE, CAPABILITY_RE):
+    for pattern in (GREETING_RE, THANKS_RE, FAREWELL_RE, LENIENT_FILLER_RE, IDENTITY_RE, CAPABILITY_RE):
         if pattern.fullmatch(normalized):
             return False
 

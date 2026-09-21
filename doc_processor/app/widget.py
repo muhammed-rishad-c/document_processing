@@ -19,7 +19,7 @@ from .llm_service import (
     extract_lead_info, classify_query,
     resolve_standalone_query, 
     is_diverted_question,
-    classify_remember_command, classify_conversational_intent,
+    classify_remember_command, classify_conversational_intent_dynamic,
     is_greeting_or_thanks, is_lead_worthy_question,
     classify_summary_query, classify_summary_target, generate_chat_summary,
     classify_structural_query, answer_structural_query,
@@ -37,7 +37,7 @@ GREETING_TEXT = (
     "solutions, or company -- happy to help."
 )
 
-MAX_LEAD_CAPTURE_ATTEMPTS = 3
+MAX_LEAD_CAPTURE_ATTEMPTS = 2
 
 LEAD_CAPTURE_PROMPT = (
     "I couldn't find that in our documentation, but our support team can help directly. "
@@ -379,8 +379,23 @@ def widget_chat(
             return WidgetChatResponse(session_id=payload.session_id, answer=ack_text)
 
         existing_memory = session.session_memory or {}
-        smalltalk = classify_conversational_intent(
+
+        # Only the last couple of turns are needed to disambiguate a short
+        # reply like "no" or "sure" — no need to load the full history here.
+        recent_msgs = (
+            db.query(ChatMessage)
+            .filter(ChatMessage.session_id == payload.session_id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(4)
+            .all()
+        )
+        recent_history = [
+            {"role": m.role, "content": m.content} for m in reversed(recent_msgs)
+        ]
+
+        smalltalk = classify_conversational_intent_dynamic(
             payload.query,
+            chat_history=recent_history,
             company_name=company.name,
             visitor_name=existing_memory.get("visitor_name"),
             is_first_turn=False,  # session/create already sent GREETING_TEXT
@@ -422,6 +437,25 @@ def widget_chat(
 
         stripped_query = (payload.query or "").strip()
         if is_greeting_or_thanks(stripped_query):
+            # This branch used to re-prompt forever — it never checked or
+            # incremented lead_capture_attempts, so a visitor who just kept
+            # saying "ok" got asked indefinitely. Now it counts toward the
+            # same limit as every other non-answer in this flow.
+            session.lead_capture_attempts += 1
+
+            if session.lead_capture_attempts >= MAX_LEAD_CAPTURE_ATTEMPTS:
+                session.awaiting_lead_capture = False
+                session.pending_lead_query = None
+                session.lead_capture_attempts = 0
+                db.add(session)
+
+                user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+                assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=LEAD_CAPTURE_GIVE_UP)
+                db.add_all([user_msg, assistant_msg])
+                db.commit()
+
+                return WidgetChatResponse(session_id=payload.session_id, answer=LEAD_CAPTURE_GIVE_UP)
+
             if not pending["name"] and not pending["email"]:
                 reprompt_text = LEAD_CAPTURE_REPROMPT_MISSING_BOTH
             elif not pending["name"]:
@@ -429,6 +463,7 @@ def widget_chat(
             else:
                 reprompt_text = LEAD_CAPTURE_REPROMPT_MISSING_EMAIL
 
+            db.add(session)
             user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
             assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=reprompt_text)
             db.add_all([user_msg, assistant_msg])
