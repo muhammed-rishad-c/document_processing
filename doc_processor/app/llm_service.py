@@ -105,12 +105,7 @@ _OPT_GREET = rf"(?:{_GREET_WORD}\s+)?"
 
 GREETING_RE = re.compile(rf"{_GREET_WORD}{_GREET_TAIL}", re.IGNORECASE)
 
-# "Core" words unambiguously signal gratitude/farewell on their own.
-# "Ack" words (ok, sure, good, fine, no...) are too overloaded with normal
-# conversational meaning to trigger a terminal reply by themselves — e.g.
-# the bot's own "Ask if you'd like the full list" can legitimately be
-# answered with a bare "sure" or "no", and that must NOT be read as
-# gratitude or a goodbye. Ack words only count when paired with a core word.
+
 _THANKS_CORE = (
     r"(?:thanks|thank you|thank u|thankyou|thx|tysm|ty|"
     r"helpful|that helps|very helpful|a lot|so much)"
@@ -140,13 +135,7 @@ FAREWELL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# THANKS_RE/FAREWELL_RE above are deliberately narrow: a false positive
-# there produces a wrong terminal-sounding reply mid-conversation (the bug
-# we're fixing). But two other call sites want the OPPOSITE tradeoff —
-# is_greeting_or_thanks() (lead-capture: "is this just filler, not a real
-# answer, so re-prompt for free") and is_lead_worthy_question() (the
-# lead-capture gate) both treat a false positive as harmless, so they keep
-# the old, broader ack/farewell word list.
+
 _LENIENT_FILLER_WORD = rf"(?:{_THANKS_TOKEN}|no|nope|i m good|im good|all good|later|maybe later)"
 LENIENT_FILLER_RE = re.compile(
     rf"{_OPT_GREET}{_LENIENT_FILLER_WORD}(?:\s+{_LENIENT_FILLER_WORD})*",
@@ -375,7 +364,7 @@ def classify_conversational_intent(
     if not text:
         return result
 
-    company = company_name or "our"
+    company = company_name or "your documents"
 
     # self-intro first: it can co-occur with a greeting ("hi, I'm John")
     intro_match = SELF_INTRO_RE.fullmatch(text)
@@ -516,7 +505,7 @@ def classify_conversational_intent_dynamic(
         print(f"[classify_conversational_intent_dynamic] LLM fallback failed, treating as real query: {e}")
         return fast
 
-    company = company_name or "our"
+    company = company_name or "your documents"
 
     if intent == "greeting":
         return {
@@ -1030,8 +1019,10 @@ def generate_rag_answer_with_memory(
     session_facts: dict | None = None,
     session_summary: str | None = None,
     session_summary_count: int | None = None,
+    company_name: str | None = None,
 ) -> dict:
     chat_history = chat_history or []
+    intro = f"{company_name} AI, a helpful chatbot" if company_name else "a helpful chatbot"
 
     t_ctx_start = time.perf_counter()
     updated_summary, new_summarized_count, reduced_history = update_and_get_history(
@@ -1060,7 +1051,7 @@ def generate_rag_answer_with_memory(
 
     if is_summary_query:
         system_prompt = (
-            "You are LiquidLab AI, a helpful company chatbot answering visitor questions.\n\n"
+            f"You are {intro} answering visitor questions.\n\n"
             "CRITICAL FORMATTING INSTRUCTIONS:\n"
             "1. Match the length to the question: a single fact gets 1-2 sentences. A question covering "
             "3 or more distinct items (services, features, technologies, steps) gets a short bulleted list. "
@@ -1085,7 +1076,7 @@ def generate_rag_answer_with_memory(
         )
     else:
         system_prompt = (
-            "You are LiquidLab AI, a helpful company chatbot answering visitor questions.\n\n"
+            f"You are {intro} answering visitor questions.\n\n"
             "CRITICAL FORMATTING INSTRUCTIONS:\n"
             "1. Match the length to the question: a single fact (e.g. contact info, a yes/no) gets 1-2 short "
             "sentences. A question covering 3 or more distinct items (services, features, technologies, steps) "

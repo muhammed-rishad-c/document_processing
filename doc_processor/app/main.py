@@ -110,10 +110,7 @@ app.include_router(widget_router)
 WIDGET_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static", "widget")
 app.mount("/widget-ui", StaticFiles(directory=WIDGET_STATIC_DIR, html=True), name="widget-ui")
 
-GREETING_TEXT = (
-    "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, "
-    "solutions, or company — happy to help."
-)      
+GREETING_TEXT = "Hi! I'm your assistant. Ask me anything about your documents."    
  
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -122,7 +119,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 def startup_event():
     init_qdrant()
     
-     
+      
 @app.middleware("http")
 async def analytics_middleware(request: Request, call_next):
     start = time.perf_counter()

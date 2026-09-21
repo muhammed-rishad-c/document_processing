@@ -32,10 +32,11 @@ from .vector_store import search_similar_chunks
 from .rate_limit import limiter, key_func_by_api_key, key_func_by_session_id
 
 
-GREETING_TEXT = (
-    "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, "
-    "solutions, or company -- happy to help."
-)
+def build_greeting(company_name: str) -> str:
+    return (
+        f"Hi! I'm the {company_name} Assistant. Ask me anything about our "
+        "services, solutions, or company -- happy to help."
+    )
 
 MAX_LEAD_CAPTURE_ATTEMPTS = 2
 
@@ -215,6 +216,7 @@ def _answer_with_rag(
             session_facts=session.session_memory or None,
             session_summary=session.running_summary,
             session_summary_count=session.summarized_count,
+            company_name=company.name,
         )
     except Exception:
         request.state.stage_timings = stage_timings
@@ -307,6 +309,9 @@ def _answer_with_rag(
 
     return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
 
+@router.get("/company")
+def get_widget_company(company: Company = Depends(get_company_from_api_key)):
+    return {"name": company.name}
 
 @router.post("/session", response_model=ChatSessionResponse, status_code=201)
 @limiter.limit("20/minute", key_func=key_func_by_api_key)
@@ -327,7 +332,7 @@ def create_widget_session(
     db.commit()
     db.refresh(session)
 
-    greeting_msg = ChatMessage(session_id=session.id, role="assistant", content=GREETING_TEXT)
+    greeting_msg = ChatMessage(session_id=session.id, role="assistant", content=build_greeting(company.name)) 
     db.add(greeting_msg)
     db.commit()
     return session

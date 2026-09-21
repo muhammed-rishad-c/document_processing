@@ -12,6 +12,21 @@ function getEmbedOrigin() {
   return params.get("embed_origin");
 }
 
+async function loadCompanyName() {
+  const tenantId = getTenantId();
+  if (!tenantId) return;
+  try {
+    const res = await fetch(`${API_BASE}/widget/company`, {
+      headers: { "X-API-Key": tenantId, "X-Embed-Origin": getEmbedOrigin() || "" },
+    });
+    if (!res.ok) return;
+    const { name } = await res.json();
+    document.getElementById("assistant-title").textContent = `${name} Assistant`;
+    document.getElementById("query-input").placeholder = `Ask about ${name}...`;
+    document.title = `${name} Chat`;
+  } catch (e) { /* keep generic labels */ }
+}
+
 function formatText(text) {
   let safe = text
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -84,7 +99,10 @@ async function createSession() {
 
   const data = await res.json();
   sessionId = data.id;
-  renderMessage("assistant", "Hi! I'm the LiquidLab Assistant. Ask me anything about our services, solutions, or company.");
+
+  // Greeting now comes from the DB (built server-side with the company name)
+  const msgRes = await fetch(`${API_BASE}/chats/${sessionId}/messages`);
+  if (msgRes.ok) (await msgRes.json()).forEach((m) => renderMessage(m.role, m.content));
 
   if (window.parent !== window) {
     window.parent.postMessage({ type: "liquidlab-session-created", sessionId: sessionId }, "*");
@@ -201,4 +219,5 @@ window.addEventListener("message", (event) => {
   }
 });
 
+loadCompanyName();
 initSession();

@@ -1060,13 +1060,13 @@
         hideTypingIndicator();
 
         if (response.ok) {
-          appendMessageToThread("liquidlab assistant", data.answer);
+                    appendMessageToThread("assistant", data.answer);
         } else {
-          appendMessageToThread("liquidlab assistant", `Error: ${data.detail}`);
+          appendMessageToThread("assistant", `Error: ${data.detail}`);
         }
       } catch (err) {
         hideTypingIndicator();
-        appendMessageToThread("liquidlab assistant", `Request failed: ${err.message}`);
+        appendMessageToThread("assistant", `Request failed: ${err.message}`);
       }
 
       resetIdleTimer();

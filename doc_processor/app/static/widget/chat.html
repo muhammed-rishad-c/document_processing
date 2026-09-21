@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LiquidLab Chat</title>
+  <title>Chat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -11,12 +12,13 @@
     rel="stylesheet">
   <link rel="stylesheet" href="chat.css">
 </head>
+
 <body>
   <div id="chat-container">
     <div id="chat-header">
       <div id="header-title">
         <span id="brand-mark" aria-hidden="true"></span>
-        <span> Assistant</span>
+        <span id="assistant-title">Assistant</span>
       </div>
       <button id="close-btn" aria-label="Close chat">✕</button>
     </div>
@@ -24,7 +26,7 @@
     <div id="messages"></div>
 
     <div id="input-row">
-      <input type="text" id="query-input" placeholder="Ask about LiquidLab..." autocomplete="off" />
+      <input type="text" id="query-input" placeholder="Ask a question..." autocomplete="off" />
       <button id="send-btn">Send</button>
     </div>
 
@@ -55,4 +57,5 @@
 
   <script src="chat.js"></script>
 </body>
+
 </html>
