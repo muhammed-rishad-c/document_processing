@@ -1,3 +1,5 @@
+import os,sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from doc_processor.app.service import (
     extract_text_from_file,
     extract_document_structure,
@@ -8,7 +10,7 @@ from doc_processor.app import service as service_module
 
 # Point this at any real PDF you want to test. No generation step, no
 # overwriting anything -- this just reads the file you already have.
-REAL_PDF_PATH = r"C:\Users\Rishad R\Downloads\Fables of the Whispering Woods.pdf"
+REAL_PDF_PATH = r"C:\Users\Rishad R\Downloads\The Grand Collection of Tales.pdf"
 
 
 def main():

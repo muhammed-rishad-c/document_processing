@@ -116,7 +116,7 @@ _THANKS_ACK = (
     r"bro|buddy)"
 )
 _THANKS_TOKEN = rf"(?:{_THANKS_CORE}|{_THANKS_ACK})"
-# Fullmatch requires at least one CORE token to appear somewhere in the run.
+
 THANKS_RE = re.compile(
     rf"{_OPT_GREET}(?:{_THANKS_TOKEN}\s+)*{_THANKS_CORE}(?:\s+{_THANKS_TOKEN})*",
     re.IGNORECASE,
@@ -128,8 +128,7 @@ _FAREWELL_CORE = (
     r"i m done|im done|we re done|that s all|thats all|that s it|thats it|"
     r"nothing else|no thanks|no thank you|nothing for now)"
 )
-# Bare "no"/"nope"/"fine"/"good"/"later"/"i m good" etc. removed as
-# standalone triggers — they're real answers as often as they're goodbyes.
+
 FAREWELL_RE = re.compile(
     rf"{_OPT_GREET}{_FAREWELL_CORE}(?:\s+(?:for now|thanks|then))?",
     re.IGNORECASE,
@@ -166,9 +165,6 @@ SELF_INTRO_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Words that appear in "I'm <x>" but are never a name. Without this,
-# "i'm interested in data" matched SELF_INTRO_RE and the bot replied
-# "Nice to meet you, Interested In Data!" and stored it as visitor_name.
 NON_NAME_TOKENS = {
     "interested", "looking", "trying", "having", "not", "sure", "new", "here",
     "just", "from", "using", "testing", "test", "confused", "wondering",
@@ -671,15 +667,7 @@ CHAPTER_EXTRACTION_PROMPT = (
 
 
 def generate_chapter_list_llm(parents: list[dict], batch_token_budget: int = 15000) -> dict:
-    """Map-reduce chapter/section detection over a list of parent-style text
-    chunks (each a dict with 'chunk_text' and 'token_count'). Chunks are
-    packed into batches up to batch_token_budget tokens, each batch is sent
-    to the LLM to extract chapter candidates, and the results are merged
-    (order-preserving, case-insensitive de-duplicated) into a single list.
-
-    Used both by the normal parent-chunk path and, via
-    generate_chapter_list_llm_from_text, by the Tier 3 upload-time fallback.
-    """
+    
     if not parents:
         return {"chapters": []}
 

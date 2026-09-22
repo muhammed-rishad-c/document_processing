@@ -54,9 +54,6 @@ class SimilarDocumentMatch(BaseModel):
     filename: str
     score: float
 
-
-
-
 class ChunkSearchResult(BaseModel):
     chunk_id: str
     document_id: str

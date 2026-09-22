@@ -72,15 +72,7 @@ def _normalize_title_for_match(title: str) -> str:
     return normalized.replace("'", "")
 
 def _extract_tier3_llm_structure(extracted_text: str, page_count: int | None) -> dict:
-    """Tier 3 fallback: infer chapter/section structure with an LLM when
-    Tier 1 (embedded TOC) fails, or for non-PDF documents that have no
-    Tier 1 at all.
-
-    This is a thin wrapper: it delegates to the existing chapter-list
-    generation logic in llm_service.py, reusing the already-extracted
-    document text rather than re-extracting it. Imported locally to avoid
-    a circular import between service.py and llm_service.py.
-    """
+    
     from .llm_service import generate_chapter_list_llm_from_text
 
     try:

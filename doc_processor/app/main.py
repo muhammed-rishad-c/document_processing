@@ -155,16 +155,7 @@ def _run_chunk_token_sequence_report(chunks: list[dict], output_path: str, doc_i
 
 
 def _run_tier3_structure_background(doc_id, extracted_text: str, page_count) -> None:
-    """Runs Tier 3 (LLM chapter inference) after the upload response has
-    already been sent, then persists the result onto Document.structure.
-
-    Uses its own DB session (Sessionlocal) rather than the request-scoped
-    `db` from get_db(), because that session is closed as soon as the
-    request finishes — long before this background task runs.
-
-    Never raises: a failed/slow LLM must not affect document ingestion,
-    which has already succeeded by the time this runs.
-    """
+    
     try:
         structure = _extract_tier3_llm_structure(extracted_text, page_count)
     except Exception as e:
@@ -225,11 +216,7 @@ async def upload_document(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    # Tier 1 (embedded TOC) only — fast, local, no LLM calls, safe to run
-    # inline in the request. Tier 2 (font heuristics) was removed: it was
-    # unreliable on real documents (miscounted "(Continued)" markers and
-    # front/back matter as new chapters). Any document without an embedded
-    # TOC now falls straight through to "none" and picks up Tier 3 below.
+    
     structure = extract_document_structure(file_bytes, file.filename)
        
     doc = Document(
@@ -250,12 +237,7 @@ async def upload_document(
         db.rollback()
         raise HTTPException(status_code=500,detail=f"Database error: {str(e)}")
 
-    # Tier 3 (LLM inference) only runs when Tier 1 found nothing (no
-    # embedded TOC), or the document is a non-PDF that skips Tier 1 entirely.
-    # It's scheduled
-    # as a background task — it needs 2-9 LLM calls, and the upload response
-    # shouldn't wait on that. Document.structure gets updated in place once
-    # it finishes; until then it stays "none".
+    
     if needs_tier3_llm_fallback(structure):
         background_tasks.add_task(
             _run_tier3_structure_background,
@@ -316,7 +298,7 @@ async def upload_document(
         "chunk_embedding_ms": round((t_embed_end - t_embed_start) * 1000, 2),
     } 
          
-    try:
+    try: 
         db.add_all(db_chunks)
         db.commit()
         store_chunk_vector(vector_data)

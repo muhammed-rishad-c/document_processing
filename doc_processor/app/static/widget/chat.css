@@ -1,22 +1,23 @@
-/* ---- Design tokens (Reading Room paper theme) ---- */
+/* ---- Design tokens (Reading Room / instrument-panel theme) ---- */
 :root {
-  --paper: #F4EFE2;         /* widget body background */
-  --paper-2: #FBF8F0;       /* header / input row background */
-  --card: #FDFBF5;          /* assistant bubble / input fill */
-  --card-hover: #F1E9D6;    /* hover states */
-  --ink: #2A241C;           /* primary text */
-  --amber: #B9791E;         /* accent */
-  --amber-hi: #8F5C13;
-  --amber-wash: rgba(185, 121, 30, 0.12);
-  --text-dim: #6B6152;      /* secondary text */
-  --text-faint: #948A75;
-  --rose: #9C4433;          /* used sparingly, e.g. destructive states */
-  --hairline: #DED2B4;
-  --hairline-strong: #C9BA92;
+  --paper: #10131A;          /* widget body background */
+  --paper-2: #151922;        /* header / input row background */
+  --card: #171B24;           /* assistant bubble / input fill */
+  --card-hi: #1D222D;
+  --card-hover: #232939;     /* hover states */
+  --ink: #EDE7D6;            /* primary text */
+  --amber: #C9A24B;          /* accent */
+  --amber-hi: #E8C36B;
+  --amber-wash: rgba(201, 162, 75, 0.14);
+  --text-dim: #A79C82;       /* secondary text */
+  --text-faint: #6E6656;
+  --rose: #C97158;           /* used sparingly, e.g. destructive states */
+  --hairline: rgba(201, 168, 92, 0.14);
+  --hairline-strong: rgba(201, 168, 92, 0.28);
 
-  --radius-lg: 6px;
-  --radius-md: 4px;
-  --radius-sm: 2px;
+  --radius-lg: 10px;
+  --radius-md: 6px;
+  --radius-sm: 3px;
 
   --serif: 'Source Serif 4', Georgia, serif;
   --sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -26,10 +27,17 @@
 
 * { box-sizing: border-box; }
 
-body {
-  font-family: var(--sans);
+html, body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: var(--sans);
   color: var(--ink);
 }
 
@@ -42,13 +50,26 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
-  background: var(--paper);
-  box-shadow: 0 20px 60px rgba(70, 50, 10, 0.18);
+  background: linear-gradient(180deg, var(--card-hi), var(--paper-2));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(201, 162, 75, 0.06);
+  animation: panel-in .25s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* ---- Header ---- */
 #chat-header {
-  background: var(--paper-2);
+  background: linear-gradient(180deg, rgba(201, 162, 75, 0.08), transparent);
   color: var(--ink);
   border-bottom: 1px solid var(--hairline);
   padding: 13px 16px;
@@ -56,6 +77,18 @@ body {
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
+  position: relative;
+}
+
+#chat-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--amber) 0%, transparent 65%);
+  opacity: 0.5;
 }
 
 #header-title {
@@ -72,9 +105,15 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 6px 1px rgba(185, 121, 30, 0.4);
+  background: var(--amber-hi);
+  box-shadow: 0 0 8px 2px rgba(201, 162, 75, 0.45);
   flex-shrink: 0;
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 #close-btn {
@@ -116,21 +155,35 @@ body {
   word-wrap: break-word;
   font-size: 13.5px;
   line-height: 1.45;
+  animation: msg-in .25s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .message.user {
-  background: var(--amber-wash);
-  border: 1px solid rgba(185, 121, 30, 0.3);
+  background: linear-gradient(155deg, rgba(201, 162, 75, 0.22), rgba(201, 162, 75, 0.1));
+  border: 1px solid rgba(201, 162, 75, 0.32);
   color: var(--ink);
   margin-left: auto;
   border-bottom-right-radius: 2px;
 }
 
 .message.assistant {
-  background: var(--card);
+  background: var(--card-hi);
   border: 1px solid var(--hairline);
   color: var(--ink);
   border-bottom-left-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .message p { margin: 0 0 6px; }
@@ -150,19 +203,20 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: var(--card);
+  background: var(--card-hi);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   border-bottom-left-radius: 2px;
   padding: 11px 14px;
   margin: 5px 0;
   width: fit-content;
+  animation: msg-in .25s cubic-bezier(.2, .8, .2, 1) both;
 }
 .thinking-bubble span {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--amber);
+  background: var(--amber-hi);
   display: inline-block;
   animation: bounce 1.1s infinite ease-in-out;
 }
@@ -179,7 +233,7 @@ body {
   gap: 8px;
   padding: 12px;
   border-top: 1px solid var(--hairline);
-  background: var(--paper-2);
+  background: rgba(201, 162, 75, 0.03);
   flex-shrink: 0;
 }
 
@@ -188,32 +242,36 @@ body {
   padding: 9px 12px;
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-sm);
-  background: var(--card);
+  background: var(--paper-2);
   font-size: 13.5px;
   font-family: inherit;
   color: var(--ink);
   min-width: 0;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
 #query-input::placeholder { color: var(--text-faint); }
 #query-input:focus {
   outline: none;
   border-color: var(--amber);
   background: var(--paper-2);
+  box-shadow: 0 0 0 3px var(--amber-wash);
 }
 
 #send-btn {
   padding: 9px 16px;
-  border: 1px solid var(--amber);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--amber);
-  color: #FCF6E9;
+  background: linear-gradient(155deg, var(--amber-hi), var(--amber) 70%);
+  color: #1A1305;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: filter 0.15s ease, box-shadow 0.15s ease, transform .05s ease;
+  box-shadow: 0 2px 10px rgba(201, 162, 75, 0.18);
 }
-#send-btn:hover { background: var(--amber-hi); border-color: var(--amber-hi); }
+#send-btn:hover { filter: brightness(1.08); box-shadow: 0 4px 16px rgba(201, 162, 75, 0.28); }
+#send-btn:active { transform: translateY(1px); }
 #send-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
 
 .hidden { display: none !important; }
@@ -222,19 +280,29 @@ body {
 #feedback-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(42, 36, 28, 0.35);
+  background: rgba(8, 9, 12, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: overlay-in .18s ease both;
 }
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 #feedback-box {
   width: 82%;
   text-align: center;
-  background: var(--paper-2);
+  background: var(--card-hi);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-lg);
   padding: 20px 18px;
-  box-shadow: 0 10px 30px rgba(70, 50, 10, 0.16);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  animation: msg-in .22s cubic-bezier(.2, .8, .2, 1) both;
 }
 #feedback-box p {
   margin: 0 0 12px;
@@ -243,8 +311,9 @@ body {
   font-weight: 600;
 }
 #star-row { font-size: 24px; margin: 4px 0 14px; cursor: pointer; }
-.star { color: var(--hairline-strong); margin: 0 3px; transition: color 0.12s ease; }
-.star.selected { color: var(--amber); }
+.star { color: var(--hairline-strong); margin: 0 3px; transition: color 0.12s ease, transform .12s ease; display: inline-block; }
+.star:hover { transform: scale(1.12); }
+.star.selected { color: var(--amber-hi); text-shadow: 0 0 10px rgba(201, 162, 75, 0.4); }
 
 #feedback-comment {
   width: 100%;
@@ -254,11 +323,12 @@ body {
   box-sizing: border-box;
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-sm);
-  background: var(--card);
+  background: var(--paper-2);
   font-family: inherit;
   font-size: 12.5px;
   resize: none;
   color: var(--ink);
+  transition: border-color .15s ease;
 }
 #feedback-comment::placeholder { color: var(--text-faint); }
 #feedback-comment:focus {
@@ -275,12 +345,16 @@ body {
   cursor: pointer;
   font-size: 12.5px;
   font-weight: 600;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, filter .15s ease;
 }
-#skip-btn { background: var(--card); border-color: var(--hairline-strong); color: var(--text-dim); }
+#skip-btn { background: transparent; border-color: var(--hairline-strong); color: var(--text-dim); }
 #skip-btn:hover { background: var(--card-hover); color: var(--ink); }
-#submit-feedback-btn { background: var(--amber); border-color: var(--amber); color: #FCF6E9; }
-#submit-feedback-btn:hover { background: var(--amber-hi); border-color: var(--amber-hi); }
+#submit-feedback-btn {
+  background: linear-gradient(155deg, var(--amber-hi), var(--amber) 70%);
+  border-color: transparent;
+  color: #1A1305;
+}
+#submit-feedback-btn:hover { filter: brightness(1.08); }
 
 /* ---- Ended state ---- */
 #ended-message {
@@ -294,6 +368,7 @@ body {
   gap: 4px;
   text-align: center;
   padding: 0 24px;
+  animation: overlay-in .2s ease both;
 }
 #ended-check {
   width: 40px;
@@ -308,7 +383,22 @@ body {
   font-size: 18px;
   font-weight: 700;
   margin-bottom: 10px;
+  box-shadow: 0 0 20px rgba(201, 162, 75, 0.18);
+  animation: check-in .3s cubic-bezier(.2, .8, .2, 1) .1s both;
 }
+
+@keyframes check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 #ended-message p {
   margin: 0;
   font-family: var(--serif);
@@ -321,4 +411,12 @@ body {
   font-size: 12.5px;
   font-weight: 400 !important;
   color: var(--text-dim) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

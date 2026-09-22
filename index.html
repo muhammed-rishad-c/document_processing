@@ -12,22 +12,24 @@
     rel="stylesheet">
   <style>
     :root {
-      --paper: #F4EFE2;
-      --paper-2: #FBF8F0;
-      --card: #FDFBF5;
-      --ink: #2A241C;
-      --ink-soft: #4A4234;
-      --hairline: #DED2B4;
-      --hairline-strong: #C9BA92;
-      --amber: #B9791E;
-      --amber-hi: #8F5C13;
-      --amber-wash: rgba(185, 121, 30, 0.12);
-      --teal: #2E6E63;
-      --rose: #9C4433;
-      --text: #2A241C;
-      --text-dim: #6B6152;
-      --text-faint: #948A75;
-      --radius-card: 3px;
+      --paper: #10131A;
+      --paper-2: #151922;
+      --card: #171B24;
+      --card-hi: #1D222D;
+      --ink: #EDE7D6;
+      --ink-soft: #C6BFA9;
+      --hairline: rgba(201, 168, 92, 0.14);
+      --hairline-strong: rgba(201, 168, 92, 0.28);
+      --amber: #C9A24B;
+      --amber-hi: #E8C36B;
+      --amber-dim: #8A7134;
+      --amber-wash: rgba(201, 162, 75, 0.12);
+      --teal: #5FAE9C;
+      --rose: #C97158;
+      --text: #EDE7D6;
+      --text-dim: #A79C82;
+      --text-faint: #6E6656;
+      --radius-card: 4px;
       --radius-pill: 999px;
       --serif: 'Source Serif 4', Georgia, serif;
       --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -42,17 +44,64 @@
     body {
       margin: 0;
       padding: 0;
+      min-height: 100%;
       background:
-        radial-gradient(1100px 600px at 12% -10%, #FBF6E8 0%, transparent 60%),
-        radial-gradient(900px 500px at 100% 0%, #F0E8D4 0%, transparent 55%),
+        radial-gradient(900px 480px at 88% -8%, rgba(201, 162, 75, 0.09) 0%, transparent 60%),
+        radial-gradient(700px 420px at 6% 8%, rgba(95, 174, 156, 0.06) 0%, transparent 55%),
         var(--paper);
       color: var(--text);
       font-family: var(--sans);
       -webkit-font-smoothing: antialiased;
+      position: relative;
+    }
+
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        linear-gradient(rgba(201, 168, 92, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(201, 168, 92, 0.035) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(900px 700px at 50% 0%, #000 0%, transparent 75%);
+    }
+
+    .bg-glow {
+      position: fixed;
+      width: 620px;
+      height: 620px;
+      border-radius: 50%;
+      top: -260px;
+      right: -160px;
+      background: radial-gradient(circle, rgba(201, 162, 75, 0.10) 0%, transparent 70%);
+      filter: blur(10px);
+      z-index: 0;
+      pointer-events: none;
+      animation: drift 22s ease-in-out infinite alternate;
+    }
+
+    @keyframes drift {
+      from {
+        transform: translate(0, 0);
+      }
+
+      to {
+        transform: translate(-40px, 60px);
+      }
+    }
+
+    .page,
+    #chatFab,
+    #chatNudge,
+    #chatPanel {
+      position: relative;
+      z-index: 1;
     }
 
     ::selection {
-      background: rgba(185, 121, 30, 0.22);
+      background: rgba(201, 162, 75, 0.28);
+      color: #0E1116;
     }
 
     a {
@@ -70,13 +119,13 @@
       border-bottom: 1px solid var(--hairline-strong);
       padding-bottom: 2rem;
       margin-bottom: 3rem;
-      animation: rise .7s cubic-bezier(.2, .8, .2, 1) both;
+      animation: rise .8s cubic-bezier(.2, .8, .2, 1) both;
     }
 
     @keyframes rise {
       from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(12px);
       }
 
       to {
@@ -91,6 +140,33 @@
       color: var(--amber-hi);
       letter-spacing: 0.02em;
       margin-bottom: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    .masthead .kicker::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 8px 2px rgba(95, 174, 156, 0.45);
+      animation: pulse-dot 2.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+
+      0%,
+      100% {
+        opacity: 0.55;
+        transform: scale(0.85);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1.1);
+      }
     }
 
     .masthead h1 {
@@ -99,7 +175,23 @@
       font-size: clamp(2.1rem, 4vw, 2.9rem);
       line-height: 1.1;
       margin: 0 0 0.7rem;
-      color: var(--ink);
+      background: linear-gradient(100deg, var(--ink) 30%, var(--amber-hi) 75%, var(--ink) 100%);
+      background-size: 220% auto;
+      background-position: 0% 50%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: sheen 2s ease-out .5s both;
+    }
+
+    @keyframes sheen {
+      from {
+        background-position: 0% 50%;
+      }
+
+      to {
+        background-position: 100% 50%;
+      }
     }
 
     .masthead p {
@@ -192,6 +284,24 @@
       font-size: 1.35rem;
       margin: 0;
       color: var(--ink);
+      display: flex;
+      align-items: baseline;
+      gap: 0.65rem;
+    }
+
+    .section-head h2 .step {
+      font-family: var(--mono);
+      font-weight: 400;
+      font-size: 0.82rem;
+      color: var(--amber);
+      border: 1px solid var(--hairline-strong);
+      border-radius: 50%;
+      width: 1.7rem;
+      height: 1.7rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
 
     .section-head .count {
@@ -201,11 +311,17 @@
     }
 
     .panel {
-      background: linear-gradient(180deg, var(--card), var(--paper-2));
+      background: linear-gradient(165deg, var(--card-hi), var(--card) 55%, var(--paper-2));
       border: 1px solid var(--hairline);
       border-radius: var(--radius-card);
       padding: 1.6rem;
-      box-shadow: 0 1px 2px rgba(90, 70, 30, 0.04);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+
+    .panel:hover {
+      border-color: var(--hairline-strong);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
     }
 
     /* ---------- form controls ---------- */
@@ -219,21 +335,22 @@
     input[type="text"],
     input[type="number"],
     select {
-      background: var(--card);
+      background: var(--paper-2);
       border: 1px solid var(--hairline-strong);
       color: var(--text);
       padding: 0.7rem 0.85rem;
-      border-radius: 2px;
+      border-radius: 3px;
       font-family: var(--sans);
       font-size: 0.92rem;
+      transition: border-color .15s ease, box-shadow .15s ease;
     }
 
     input[type="text"]:focus,
     input[type="number"]:focus,
     select:focus {
-      outline: 2px solid var(--amber);
-      outline-offset: 1px;
+      outline: none;
       border-color: var(--amber);
+      box-shadow: 0 0 0 3px var(--amber-wash);
     }
 
     input[type="text"] {
@@ -246,17 +363,19 @@
       font-weight: 600;
       font-size: 0.88rem;
       padding: 0.7rem 1.2rem;
-      border-radius: 2px;
+      border-radius: 3px;
       border: 1px solid transparent;
       cursor: pointer;
-      background: var(--amber);
-      color: #FCF6E9;
-      transition: filter .15s ease, transform .05s ease;
+      background: linear-gradient(155deg, var(--amber-hi), var(--amber) 70%);
+      color: #1A1305;
+      transition: filter .15s ease, transform .05s ease, box-shadow .15s ease;
       white-space: nowrap;
+      box-shadow: 0 2px 10px rgba(201, 162, 75, 0.18);
     }
 
     button:hover {
       filter: brightness(1.08);
+      box-shadow: 0 4px 16px rgba(201, 162, 75, 0.28);
     }
 
     button:active {
@@ -266,26 +385,30 @@
     button.ghost {
       background: transparent;
       border: 1px solid var(--hairline-strong);
-      color: var(--ink);
+      color: var(--ink-soft);
+      box-shadow: none;
     }
 
     button.ghost:hover {
       border-color: var(--amber);
       color: var(--amber-hi);
       filter: none;
+      box-shadow: none;
     }
 
     button.danger {
       background: transparent;
-      border: 1px solid rgba(156, 68, 51, 0.4);
+      border: 1px solid rgba(201, 113, 88, 0.4);
       color: var(--rose);
       padding: 0.45rem 0.85rem;
       font-size: 0.8rem;
+      box-shadow: none;
     }
 
     button.danger:hover {
-      background: rgba(156, 68, 51, 0.08);
+      background: rgba(201, 113, 88, 0.1);
       filter: none;
+      box-shadow: none;
     }
 
     /* file input dropzone-ish */
@@ -300,17 +423,23 @@
       color: var(--text-dim);
       font-family: var(--sans);
       font-size: 0.86rem;
-      background: var(--card);
+      background: var(--paper-2);
       border: 1px dashed var(--hairline-strong);
-      border-radius: 2px;
+      border-radius: 3px;
       padding: 0.65rem 0.8rem;
+      transition: border-color .15s ease, background .15s ease;
+    }
+
+    input[type="file"]:hover {
+      border-color: var(--amber);
+      background: var(--card-hi);
     }
 
     input[type="file"]::file-selector-button {
-      background: var(--paper-2);
+      background: var(--card-hi);
       color: var(--ink);
       border: 1px solid var(--hairline-strong);
-      border-radius: 2px;
+      border-radius: 3px;
       padding: 0.4rem 0.7rem;
       margin-right: 0.75rem;
       font-family: var(--sans);
@@ -337,8 +466,15 @@
       justify-content: space-between;
       align-items: flex-start;
       gap: 1rem;
-      padding: 0.95rem 0;
+      padding: 0.95rem 0.5rem;
+      margin: 0 -0.5rem;
       border-bottom: 1px solid var(--hairline);
+      border-radius: 3px;
+      transition: background .15s ease;
+    }
+
+    .ledger-row:hover {
+      background: rgba(201, 162, 75, 0.045);
     }
 
     .ledger-row:last-child {
@@ -365,9 +501,10 @@
     .chunk-card {
       background: var(--card);
       border-left: 3px solid var(--amber);
-      border-radius: 2px;
+      border-radius: 3px;
       padding: 0.9rem 1.05rem;
       margin-bottom: 0.75rem;
+      animation: chunk-in .35s cubic-bezier(.2, .8, .2, 1) both;
       border-top: 1px solid var(--hairline);
       border-right: 1px solid var(--hairline);
       border-bottom: 1px solid var(--hairline);
@@ -377,6 +514,34 @@
       font-size: 0.9rem;
       color: var(--text-dim);
       line-height: 1.5;
+    }
+
+    @keyframes chunk-in {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .chunk-card:nth-child(2) {
+      animation-delay: .04s;
+    }
+
+    .chunk-card:nth-child(3) {
+      animation-delay: .08s;
+    }
+
+    .chunk-card:nth-child(4) {
+      animation-delay: .12s;
+    }
+
+    .chunk-card:nth-child(n+5) {
+      animation-delay: .16s;
     }
 
     /* =====================================================
@@ -390,25 +555,54 @@
       width: 60px;
       height: 60px;
       border-radius: 50%;
-      background: var(--amber);
+      background: linear-gradient(155deg, var(--amber-hi), var(--amber) 70%);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 24px rgba(90, 60, 10, 0.22), 0 0 0 1px rgba(185, 121, 30, 0.18);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(201, 162, 75, 0.25);
       cursor: pointer;
       z-index: 1000;
       padding: 0;
-      transition: transform .15s ease, filter .15s ease;
+      transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+    }
+
+    #chatFab::before {
+      content: "";
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1px solid rgba(201, 162, 75, 0.35);
+      animation: halo 2.6s ease-out infinite;
+      pointer-events: none;
+    }
+
+    #chatFab.is-open::before {
+      animation: none;
+      opacity: 0;
+    }
+
+    @keyframes halo {
+      0% {
+        transform: scale(0.92);
+        opacity: 0.7;
+      }
+
+      100% {
+        transform: scale(1.35);
+        opacity: 0;
+      }
     }
 
     #chatFab:hover {
       transform: scale(1.06);
-      filter: brightness(1.05);
+      filter: brightness(1.06);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(201, 162, 75, 0.35);
     }
 
     #chatFab svg {
       width: 26px;
       height: 26px;
+      position: relative;
     }
 
     #chatFab .ico-open {
@@ -431,15 +625,15 @@
       position: fixed;
       bottom: 2.4rem;
       right: 5.6rem;
-      background: var(--card);
+      background: var(--card-hi);
       border: 1px solid var(--hairline-strong);
       color: var(--ink);
       padding: 0.65rem 0.95rem;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 0.85rem;
       max-width: 220px;
       z-index: 999;
-      box-shadow: 0 6px 20px rgba(90, 70, 30, 0.14);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
       animation: rise .5s ease .9s both;
     }
 
@@ -450,7 +644,7 @@
       bottom: 16px;
       width: 12px;
       height: 12px;
-      background: var(--card);
+      background: var(--card-hi);
       border-right: 1px solid var(--hairline-strong);
       border-bottom: 1px solid var(--hairline-strong);
       transform: rotate(-45deg);
@@ -477,10 +671,12 @@
       width: 392px;
       max-width: calc(100vw - 2rem);
       height: min(600px, calc(100vh - 8.5rem));
-      background: linear-gradient(180deg, var(--card), var(--paper-2));
+      background: linear-gradient(180deg, var(--card-hi), var(--paper-2));
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--hairline-strong);
-      border-radius: 6px;
-      box-shadow: 0 20px 60px rgba(70, 50, 10, 0.18);
+      border-radius: 12px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(201, 162, 75, 0.08);
       display: flex;
       flex-direction: column;
       z-index: 999;
@@ -488,7 +684,7 @@
       opacity: 0;
       transform: translateY(16px) scale(0.98);
       pointer-events: none;
-      transition: opacity .2s ease, transform .2s ease;
+      transition: opacity .22s cubic-bezier(.2, .8, .2, 1), transform .22s cubic-bezier(.2, .8, .2, 1);
     }
 
     #chatPanel.is-open {
@@ -500,7 +696,19 @@
     .chat-header {
       padding: 1rem 1.1rem 0.9rem;
       border-bottom: 1px solid var(--hairline);
-      background: rgba(90, 70, 30, 0.04);
+      background: linear-gradient(180deg, rgba(201, 162, 75, 0.07), transparent);
+      position: relative;
+    }
+
+    .chat-header::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 1px;
+      background: linear-gradient(90deg, var(--amber) 0%, transparent 60%);
+      opacity: 0.5;
     }
 
     .chat-header-top {
@@ -515,16 +723,19 @@
       font-size: 1.08rem;
       margin: 0;
       color: var(--ink);
+      display: flex;
+      align-items: center;
     }
 
     .chat-header .lamp {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--amber);
+      background: var(--amber-hi);
       display: inline-block;
       margin-right: 0.5rem;
-      box-shadow: 0 0 8px 2px rgba(185, 121, 30, 0.35);
+      box-shadow: 0 0 8px 2px rgba(201, 162, 75, 0.45);
+      animation: pulse-dot 2.4s ease-in-out infinite;
     }
 
     .chat-controls {
@@ -573,26 +784,40 @@
     .chat-message {
       max-width: 84%;
       padding: 0.7rem 0.9rem;
-      border-radius: 8px;
+      border-radius: 10px;
       line-height: 1.5;
       font-size: 0.89rem;
       word-wrap: break-word;
+      animation: msg-in .28s cubic-bezier(.2, .8, .2, 1) both;
+    }
+
+    @keyframes msg-in {
+      from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     .chat-message.user {
       align-self: flex-end;
-      background: var(--amber-wash);
-      border: 1px solid rgba(185, 121, 30, 0.3);
+      background: linear-gradient(155deg, rgba(201, 162, 75, 0.22), rgba(201, 162, 75, 0.1));
+      border: 1px solid rgba(201, 162, 75, 0.32);
       color: var(--ink);
       border-bottom-right-radius: 2px;
     }
 
     .chat-message.assistant {
       align-self: flex-start;
-      background: var(--card);
+      background: var(--card-hi);
       border: 1px solid var(--hairline);
       color: var(--ink);
       border-bottom-left-radius: 2px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
 
     .chat-message .role-label {
@@ -616,12 +841,13 @@
       display: flex;
       align-items: center;
       gap: 0.6rem;
-      background: var(--card);
+      background: var(--card-hi);
       border: 1px solid var(--hairline);
       border-bottom-left-radius: 2px;
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 0.65rem 0.9rem;
       max-width: 84%;
+      animation: msg-in .28s cubic-bezier(.2, .8, .2, 1) both;
     }
 
     .thinking-dots {
@@ -633,7 +859,7 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: var(--amber);
+      background: var(--amber-hi);
       animation: bounce 1.1s infinite ease-in-out;
     }
 
@@ -669,7 +895,7 @@
     .chat-input-row {
       padding: 0.85rem 1.1rem 1.05rem;
       border-top: 1px solid var(--hairline);
-      background: rgba(90, 70, 30, 0.04);
+      background: rgba(201, 162, 75, 0.03);
     }
 
     .chat-input-row .row {
@@ -706,10 +932,24 @@
         right: 1.1rem;
       }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 
 <body>
+
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
 
   <div class="page">
 
@@ -723,7 +963,7 @@
     <!-- 1. Upload -->
     <section class="section" id="upload-section">
       <div class="section-head">
-        <h2>Add to the archive</h2>
+        <h2><span class="step">01</span>Add to the archive</h2>
       </div>
       <div class="panel">
         <form id="uploadForm">
@@ -741,7 +981,7 @@
     <!-- 3. Raw chunk vector search -->
     <section class="section" id="search-section">
       <div class="section-head">
-        <h2>Search the index</h2>
+        <h2><span class="step">02</span>Search the index</h2>
       </div>
       <div class="panel">
         <div class="row">
@@ -755,7 +995,7 @@
     <!-- 4. Stored documents -->
     <section class="section" id="documents-section">
       <div class="section-head">
-        <h2>Stored documents</h2>
+        <h2><span class="step">03</span>Stored documents</h2>
         <button class="ghost" onclick="loadDocuments()">Refresh</button>
       </div>
       <div class="panel">
@@ -774,13 +1014,13 @@
   </div>
 
   <button id="chatFab" onclick="toggleChatPanel()" aria-label="Open chat assistant">
-    <svg class="ico-open" viewBox="0 0 24 24" fill="none" stroke="#FCF6E9" stroke-width="2" stroke-linecap="round"
+    <svg class="ico-open" viewBox="0 0 24 24" fill="none" stroke="#1A1305" stroke-width="2" stroke-linecap="round"
       stroke-linejoin="round">
       <path
         d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z">
       </path>
     </svg>
-    <svg class="ico-close" viewBox="0 0 24 24" fill="none" stroke="#FCF6E9" stroke-width="2" stroke-linecap="round"
+    <svg class="ico-close" viewBox="0 0 24 24" fill="none" stroke="#1A1305" stroke-width="2" stroke-linecap="round"
       stroke-linejoin="round">
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
