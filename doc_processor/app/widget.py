@@ -7,12 +7,13 @@ from fastapi import Request
 from slowapi.util import get_remote_address
 
 from .database import get_db
-from .models import ChatSession, ChatMessage, Company, Lead, CompanyDepartment,Document
+from .models import ChatSession, ChatMessage, Company, Lead, CompanyDepartment, Document, Persona
 from .schemas import (
     WidgetSessionCreate,
     ChatSessionResponse,
     WidgetChatRequest,
     WidgetChatResponse,
+    PersonaOption,
 )
 from .llm_service import (
     generate_rag_answer_with_memory,
@@ -35,6 +36,12 @@ from .rate_limit import limiter, key_func_by_api_key, key_func_by_session_id
 def build_greeting(company_name: str) -> str:
     return (
         f"Hi! I'm the {company_name} Assistant. Ask me anything about our "
+        "services, solutions, or company -- happy to help."
+    )
+
+def build_persona_greeting(persona_name: str) -> str:
+    return (
+        f"Hi! I'm {persona_name}. Ask me anything about our "
         "services, solutions, or company -- happy to help."
     )
 
@@ -161,12 +168,33 @@ def _resolve_department(db: Session, company: Company, category_name: str | None
 
     return None, None
 
+
+def _get_active_personas(db: Session, company_id) -> list[Persona]:
+    return (
+        db.query(Persona)
+        .filter(Persona.company_id == company_id, Persona.is_active.is_(True))
+        .all()
+    )
+
+
+def _resolve_persona(db: Session, company: Company, persona_slug: str | None) -> Persona | None:
+    personas = _get_active_personas(db, company.id)
+
+    if persona_slug:
+        normalized = persona_slug.strip().lower()
+        for p in personas:
+            if p.slug == normalized:
+                return p
+
+    return next((p for p in personas if p.is_default), None)
+
 def _answer_with_rag(
     request: Request,
     db: Session,
     session: ChatSession,
     company: Company,
     payload: WidgetChatRequest,
+    persona: Persona | None = None,
     initial_stage_timings: dict | None = None,
 ) -> WidgetChatResponse:
     stage_timings: dict = dict(initial_stage_timings) if initial_stage_timings else {}
@@ -217,6 +245,7 @@ def _answer_with_rag(
             session_summary=session.running_summary,
             session_summary_count=session.summarized_count,
             company_name=company.name,
+            persona={"name": persona.name, "role_description": persona.role_description} if persona else None,
         )
     except Exception:
         request.state.stage_timings = stage_timings
@@ -313,6 +342,16 @@ def _answer_with_rag(
 def get_widget_company(company: Company = Depends(get_company_from_api_key)):
     return {"name": company.name}
 
+@router.get("/personas", response_model=list[PersonaOption])
+@limiter.limit("30/minute", key_func=key_func_by_api_key)
+def list_widget_personas(
+    request: Request,
+    company: Company = Depends(get_company_from_api_key),
+    db: Session = Depends(get_db),
+):
+    return _get_active_personas(db, company.id)
+
+
 @router.post("/session", response_model=ChatSessionResponse, status_code=201)
 @limiter.limit("20/minute", key_func=key_func_by_api_key)
 def create_widget_session(
@@ -323,16 +362,24 @@ def create_widget_session(
     _backstop: None = Depends(_session_ip_backstop),
     company: Company = Depends(get_company_from_api_key),
 ):
+    persona = _resolve_persona(db, company, payload.persona_slug)
+
     session = ChatSession(
         title=payload.title,
         document_id=company.document_id,
         company_id=company.id,
+        persona_id=persona.id if persona else None,
     )
     db.add(session)
     db.commit()
     db.refresh(session)
 
-    greeting_msg = ChatMessage(session_id=session.id, role="assistant", content=build_greeting(company.name)) 
+    greeting_text = (
+        persona.greeting_text if persona and persona.greeting_text
+        else build_persona_greeting(persona.name) if persona
+        else build_greeting(company.name)
+    )
+    greeting_msg = ChatMessage(session_id=session.id, role="assistant", content=greeting_text)
     db.add(greeting_msg)
     db.commit()
     return session
@@ -356,6 +403,8 @@ def widget_chat(
         raise HTTPException(status_code=401, detail="This session is no longer active.")
 
     _check_origin_and_allow(request, response, company)
+
+    persona = db.query(Persona).filter(Persona.id == session.persona_id).first() if session.persona_id else None
 
     if not session.awaiting_lead_capture:
         remember_cmd = classify_remember_command(payload.query)
@@ -385,8 +434,7 @@ def widget_chat(
 
         existing_memory = session.session_memory or {}
 
-        # Only the last couple of turns are needed to disambiguate a short
-        # reply like "no" or "sure" — no need to load the full history here.
+        
         recent_msgs = (
             db.query(ChatMessage)
             .filter(ChatMessage.session_id == payload.session_id)
@@ -402,8 +450,9 @@ def widget_chat(
             payload.query,
             chat_history=recent_history,
             company_name=company.name,
+            persona_name=persona.name if persona else None,
             visitor_name=existing_memory.get("visitor_name"),
-            is_first_turn=False,  # session/create already sent GREETING_TEXT
+            is_first_turn=False,  
         )
 
         if smalltalk["memory_update"] and smalltalk["is_smalltalk"]:
@@ -442,10 +491,7 @@ def widget_chat(
 
         stripped_query = (payload.query or "").strip()
         if is_greeting_or_thanks(stripped_query):
-            # This branch used to re-prompt forever — it never checked or
-            # incremented lead_capture_attempts, so a visitor who just kept
-            # saying "ok" got asked indefinitely. Now it counts toward the
-            # same limit as every other non-answer in this flow.
+            
             session.lead_capture_attempts += 1
 
             if session.lead_capture_attempts >= MAX_LEAD_CAPTURE_ATTEMPTS:
@@ -489,7 +535,7 @@ def widget_chat(
             session.pending_lead_query = None
             session.lead_capture_attempts = 0
             db.add(session)
-            return _answer_with_rag(request, db, session, company, payload, initial_stage_timings=stage_timings)
+            return _answer_with_rag(request, db, session, company, payload, persona, initial_stage_timings=stage_timings)
 
         name = extracted.get("name") or pending["name"]
         email = extracted.get("email") or pending["email"]
@@ -582,4 +628,32 @@ def widget_chat(
 
             return WidgetChatResponse(session_id=payload.session_id, answer=reprompt_text)
 
-    return _answer_with_rag(request, db, session, company, payload)
+    return _answer_with_rag(request, db, session, company, payload, persona)
+
+
+@router.get("/session/{session_id}")
+@limiter.limit("30/minute", key_func=key_func_by_api_key)
+def get_widget_session(
+    request: Request,
+    session_id: str,
+    company: Company = Depends(get_company_from_api_key),
+    db: Session = Depends(get_db),
+):
+    session = (
+        db.query(ChatSession)
+        .filter(ChatSession.id == session_id, ChatSession.company_id == company.id)
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    persona = (
+        db.query(Persona).filter(Persona.id == session.persona_id).first()
+        if session.persona_id else None
+    )
+
+    return {
+        "session_id": session.id,
+        "persona_slug": persona.slug if persona else None,
+        "persona_name": persona.name if persona else None,
+    }

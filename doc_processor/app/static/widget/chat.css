@@ -130,6 +130,76 @@ body {
 #close-btn:hover { background: var(--card-hover); color: var(--ink); }
 #close-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
 
+#header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#back-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#back-btn:hover { background: var(--card-hover); color: var(--ink); }
+#back-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+/* ---- Persona picker ---- */
+#persona-picker {
+  position: absolute;
+  inset: 0;
+  top: 53px;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 16px;
+  overflow-y: auto;
+  animation: overlay-in .18s ease both;
+}
+
+#picker-title {
+  margin: 4px 0 16px;
+  font-family: var(--serif);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+}
+
+#persona-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.persona-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  background: var(--card-hi);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color .15s ease, background .15s ease, transform .05s ease;
+}
+.persona-option:hover { border-color: var(--amber); background: var(--card-hover); }
+.persona-option:active { transform: translateY(1px); }
+.persona-option:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+.persona-option-name { font-weight: 600; font-size: 13.5px; }
+.persona-option-desc { font-size: 12px; color: var(--text-dim); }
+
 /* ---- Messages ---- */
 #messages {
   flex: 1;

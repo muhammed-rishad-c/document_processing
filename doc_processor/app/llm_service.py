@@ -5,7 +5,6 @@ import random
 import json as _json
 
 from dotenv import load_dotenv
-
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
@@ -37,8 +36,6 @@ primary_llm = ChatOpenAI(
     timeout=30,
     max_retries=0,
 )
-
-
 fallback_llm = ChatOpenAI(
     model=FALLBACK_LLM_MODEL_NAME,
     base_url=FALLBACK_BASE_URL,
@@ -48,7 +45,6 @@ fallback_llm = ChatOpenAI(
     timeout=20,
     max_retries=1,
 )
-
 
 llm = primary_llm.with_fallbacks([fallback_llm])
 
@@ -83,8 +79,6 @@ _SUMMARY_FILLER_WORDS = {
     "all", "it", "thread", "file", "up", "with",
 }
 
-
-
 _PUNCT_EMOJI_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _REPEAT_CHAR_RE = re.compile(r"(.)\1{2,}")
 
@@ -104,7 +98,6 @@ _GREET_TAIL = r"(?:\s+(?:there|bot|team|guys|folks|all|again))?"
 _OPT_GREET = rf"(?:{_GREET_WORD}\s+)?"
 
 GREETING_RE = re.compile(rf"{_GREET_WORD}{_GREET_TAIL}", re.IGNORECASE)
-
 
 _THANKS_CORE = (
     r"(?:thanks|thank you|thank u|thankyou|thx|tysm|ty|"
@@ -133,7 +126,6 @@ FAREWELL_RE = re.compile(
     rf"{_OPT_GREET}{_FAREWELL_CORE}(?:\s+(?:for now|thanks|then))?",
     re.IGNORECASE,
 )
-
 
 _LENIENT_FILLER_WORD = rf"(?:{_THANKS_TOKEN}|no|nope|i m good|im good|all good|later|maybe later)"
 LENIENT_FILLER_RE = re.compile(
@@ -194,7 +186,6 @@ _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0e-\x1f\x7f]")
 _ENCLOSING_QUOTE_RE = re.compile(r"""^['"\u201c\u201d\u2018\u2019]+|['"\u201c\u201d\u2018\u2019]+$""")
 _HAS_CONTENT_RE = re.compile(r"""[^\s.,!?;:\-_'"]""")
 
-
 def _sanitize_remember_text(raw: str, max_length: int) -> str:
     
     if not raw:
@@ -228,7 +219,6 @@ STRUCTURAL_TRIGGER_RE = re.compile(
     r"what('s| is) in (this|the) (document|book))\b",
     re.IGNORECASE,
 )
-
 
 def classify_structural_query(query: str) -> dict:
     
@@ -271,7 +261,6 @@ def classify_summary_target(query: str) -> str:
     except Exception as e:
         print(f"[classify_summary_target] failed, defaulting to document: {e}")
     return "document"
-
 
 CHAT_SUMMARY_PROMPT = (
     "Summarize this conversation as a short, scannable list. Rules:\n"
@@ -320,34 +309,27 @@ def _validate_intro_name(raw: str) -> str | None:
         return None
     return _format_intro_name(" ".join(tokens))
 
-
-def _brand(company_name: str | None) -> str:
+def _brand(company_name: str | None, persona_name: str | None = None) -> str:
+    if persona_name:
+        return persona_name
     return f"the {company_name} Assistant" if company_name else "your assistant"
-
 
 def _who(visitor_name: str | None) -> str:
     return f" {visitor_name}" if visitor_name else ""
 
-
 def classify_conversational_intent(
     query: str,
     company_name: str | None = None,
+    persona_name: str | None = None,
     visitor_name: str | None = None,
     is_first_turn: bool = False,
 ) -> dict:
-    """Deterministic, no LLM call. Returns:
-      intent        - greeting|thanks|farewell|identity|capability|self_intro|none
-      is_smalltalk  - True when we should answer here and skip RAG entirely
-      reply         - the answer text (None when intent == 'none')
-      memory_update - dict to merge into session_memory, or None
-    """
+    
     result = {"intent": "none", "is_smalltalk": False, "reply": None, "memory_update": None}
     raw_stripped = (query or "").strip()
     text = _normalize_conversational(query)
 
-    # Message had real characters (emoji, "!!", a thumbs-up) but normalizes
-    # to nothing — it's a pure reaction, not a real question. Answer it for
-    # free instead of burning a vector search + LLM call on empty content.
+    
     if raw_stripped and not text:
         result["intent"] = "reaction"
         result["is_smalltalk"] = True
@@ -379,13 +361,12 @@ def classify_conversational_intent(
     if GREETING_RE.fullmatch(text):
         result["intent"] = "greeting"
         result["is_smalltalk"] = True
-        # The widget already opened with a full greeting; don't repeat it.
         result["reply"] = random.choice([
             f"Hey{_who(visitor_name)}! What would you like to know about {company}?",
             f"Hi{_who(visitor_name)}! Ask me anything about {company} — I'm happy to help.",
             f"Hello{_who(visitor_name)}! What can I help you with today?",
         ]) if not is_first_turn else (
-            f"Hi there! I'm {_brand(company_name)} — ask me anything about "
+            f"Hi there! I'm {_brand(company_name, persona_name)} — ask me anything about "
             f"{company}'s services, solutions, or company."
         )
         return result
@@ -414,7 +395,7 @@ def classify_conversational_intent(
         result["intent"] = "identity"
         result["is_smalltalk"] = True
         result["reply"] = (
-            f"I'm {_brand(company_name)} — an AI assistant that answers questions "
+            f"I'm {_brand(company_name, persona_name)} — an AI assistant that answers questions "
             f"about {company} using our documentation. If I can't find something, "
             "I'll pass it to the team so a person can follow up."
         )
@@ -431,7 +412,6 @@ def classify_conversational_intent(
         return result
 
     return result
-
 
 CONVO_INTENT_PROMPT = (
     "You are looking at one short visitor message in a company support chat widget.\n"
@@ -452,29 +432,16 @@ CONVO_INTENT_PROMPT = (
     "Visitor's new message: {message}"
 )
 
-
 def classify_conversational_intent_dynamic(
     query: str,
     chat_history: list[dict] | None = None,
     company_name: str | None = None,
+    persona_name: str | None = None,
     visitor_name: str | None = None,
     is_first_turn: bool = False,
 ) -> dict:
-    """Two-tier smalltalk classifier.
-
-    Tier 1: the deterministic regex path above (free, catches the clear
-    majority of greetings/thanks/farewells/self-intros with zero latency).
-
-    Tier 2: only reached when tier 1 found nothing AND the message is short
-    (<=6 words). Real questions are long enough that they never make it
-    here, so this never adds latency to normal RAG queries. This tier calls
-    the LLM with the assistant's last message as context, which is the only
-    way to correctly resolve context-dependent one-word replies like "no"
-    or "sure" that a regex can't safely classify on its own (see the
-    THANKS_RE/FAREWELL_RE tightening above for why those were pulled out of
-    the deterministic path).
-    """
-    fast = classify_conversational_intent(query, company_name, visitor_name, is_first_turn)
+    
+    fast = classify_conversational_intent(query, company_name, persona_name, visitor_name, is_first_turn)
     if fast["intent"] != "none":
         return fast
 
@@ -536,7 +503,6 @@ def classify_conversational_intent_dynamic(
 
     return fast  # intent == "other" (or unrecognized) -> let RAG handle it
 
-
 def is_greeting_or_thanks(query: str) -> bool:
     """Used during lead capture, where a greeting must re-prompt, not reset."""
     text = _normalize_conversational(query)
@@ -549,7 +515,6 @@ def is_greeting_or_thanks(query: str) -> bool:
 def _normalize_memory_key(raw_key: str) -> str:
     key = re.sub(r"[^a-z0-9]+", "_", raw_key.strip().lower()).strip("_")
     return key or raw_key.strip().lower()
-
 
 def classify_remember_command(query: str) -> dict | None:
 
@@ -578,7 +543,6 @@ def classify_remember_command(query: str) -> dict | None:
         "display_key": display_key,
         "value": value,
     }
-
 
 def classify_summary_query(query: str) -> dict:
     
@@ -625,7 +589,6 @@ def answer_structural_query(kind: str, structure: dict | None) -> str:
 
     return "I couldn't determine that from the document structure."
 
-
 CHAPTER_EXTRACTION_PROMPT = (
     "You are analyzing one portion of a larger document to identify chapter or "
     "major section titles that appear in THIS portion of text.\n\n"
@@ -664,7 +627,6 @@ CHAPTER_EXTRACTION_PROMPT = (
     'in exactly this shape: {{"chapters": ["title1", "title2", ...]}}.\n\n'
     "TEXT PORTION:\n{text}"
 )
-
 
 def generate_chapter_list_llm(parents: list[dict], batch_token_budget: int = 15000) -> dict:
     
@@ -717,7 +679,6 @@ def generate_chapter_list_llm(parents: list[dict], batch_token_budget: int = 150
 
     return {"chapters": all_chapters}
 
-
 def generate_chapter_list_llm_from_text(text: str, batch_token_budget: int = 15000) -> dict:
     
     from .service import chunk_text
@@ -731,7 +692,6 @@ def generate_chapter_list_llm_from_text(text: str, batch_token_budget: int = 150
 
     return generate_chapter_list_llm(parents, batch_token_budget=batch_token_budget)
 
-
 def _to_lc_messages(history: list[dict]) -> list:
     
     lc_messages = []
@@ -743,7 +703,6 @@ def _to_lc_messages(history: list[dict]) -> list:
         else:
             lc_messages.append(AIMessage(content=content))
     return lc_messages
-
 
 SUMMARY_MERGE_PROMPT = (
     "Update the running summary of this conversation by folding in the new "
@@ -803,7 +762,6 @@ def update_and_get_history(
     reduced = ([{"role": "assistant", "content": f"[Conversation summary]: {updated_summary}"}] if updated_summary else []) + recent
     return updated_summary, new_count, reduced
 
-
 def build_safe_context(
     retrieved_chunks: list[dict],
     query_text: str,
@@ -832,7 +790,6 @@ def build_safe_context(
     combined_context = "".join(selected_chunks)
     return combined_context, current_tokens
 
- 
 LEAD_IN_PATTERN = re.compile(
     r"^(based on|according to|as (?:stated|mentioned|shown|outlined) in|as per|per|from)\s+"
     r"(the\s+)?(provided\s+|given\s+|available\s+)?"
@@ -908,7 +865,6 @@ _JUNK_PROBE_WORDS = {
     "xyz", "abc", "foo", "bar", "foobar", "lorem", "ipsum",
 }
 
-
 def _looks_like_gibberish(token: str) -> bool:
     t = re.sub(r"[^a-z]", "", token.lower())
     if not t:
@@ -926,7 +882,6 @@ def _looks_like_gibberish(token: str) -> bool:
     if len(set(t)) <= 2:          # "aaaa", "abab"
         return True
     return False
-
 
 def is_lead_worthy_question(query: str) -> bool:
     """Gate before opening the lead-capture funnel on a NO_ANSWER result.
@@ -954,7 +909,6 @@ def is_lead_worthy_question(query: str) -> bool:
         return False
 
     return True
-
 
 def looks_like_new_question(message: str) -> bool | None:
     """Heuristic, no LLM call. True = clearly a question/request.
@@ -988,7 +942,6 @@ def classify_lead_reply_intent(message: str) -> str:
         print(f"[classify_lead_reply_intent] LLM classification failed, defaulting to contact_info: {e}")
         return "contact_info"
 
-
 def is_diverted_question(message: str, extracted: dict) -> bool:
     if extracted.get("name") or extracted.get("email") or extracted.get("phone"):
         return False
@@ -999,7 +952,6 @@ def is_diverted_question(message: str, extracted: dict) -> bool:
 
     return classify_lead_reply_intent(message) == "new_question"
 
-
 def generate_rag_answer_with_memory(
     user_query: str,
     retrieved_chunks: list[dict],
@@ -1008,9 +960,14 @@ def generate_rag_answer_with_memory(
     session_summary: str | None = None,
     session_summary_count: int | None = None,
     company_name: str | None = None,
+    persona: dict | None = None,
 ) -> dict:
     chat_history = chat_history or []
-    intro = f"{company_name} AI, a helpful chatbot" if company_name else "a helpful chatbot"
+    if persona and persona.get("role_description"):
+        persona_framing = persona["role_description"].strip()
+    else:
+        intro = f"{company_name} AI, a helpful chatbot" if company_name else "a helpful chatbot"
+        persona_framing = f"You are {intro} answering visitor questions."
 
     t_ctx_start = time.perf_counter()
     updated_summary, new_summarized_count, reduced_history = update_and_get_history(
@@ -1039,7 +996,7 @@ def generate_rag_answer_with_memory(
 
     if is_summary_query:
         system_prompt = (
-            f"You are {intro} answering visitor questions.\n\n"
+            f"{persona_framing}\n\n"
             "CRITICAL FORMATTING INSTRUCTIONS:\n"
             "1. Match the length to the question: a single fact gets 1-2 sentences. A question covering "
             "3 or more distinct items (services, features, technologies, steps) gets a short bulleted list. "
@@ -1064,7 +1021,7 @@ def generate_rag_answer_with_memory(
         )
     else:
         system_prompt = (
-            f"You are {intro} answering visitor questions.\n\n"
+            f"{persona_framing}\n\n"
             "CRITICAL FORMATTING INSTRUCTIONS:\n"
             "1. Match the length to the question: a single fact (e.g. contact info, a yes/no) gets 1-2 short "
             "sentences. A question covering 3 or more distinct items (services, features, technologies, steps) "
@@ -1147,8 +1104,6 @@ def generate_rag_answer_with_memory(
         "summarized_count": new_summarized_count,
     }
     
-
-
 def extract_lead_info(message: str) -> dict:
     
     result = {"name": None, "email": None, "phone": None}

@@ -34,7 +34,6 @@ class DocumentUploadResponse(BaseModel):
     stats: Dict[str, Any]
     message: str
 
-
 class SearchResponse(BaseModel):
     query: str
     occurrences: int
@@ -76,8 +75,6 @@ class RAGRequest(BaseModel):
     top_k: int = 7
     document_id: Optional[str] = None
     
-
-
 class ChunkSource(BaseModel):
     chunk_id: str
     document_id: str
@@ -88,9 +85,7 @@ class RAGResponse(BaseModel):
     query: str
     answer: str
     sources: List[ChunkSource]
-
-
-    
+  
 class ChatSessionCreate(BaseModel):
     title: Optional[str] = "New Conversation"
     document_id: Optional[str] = None
@@ -127,17 +122,15 @@ class FeedbackRequest(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     comment: Optional[str] = None
     
-    
 class WidgetSessionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: Optional[str] = None
-
+    persona_slug: Optional[str] = None
 
 class WidgetChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     session_id: UUID
     query: str = Field(min_length=1, max_length=1000)
-
 
 class WidgetChatResponse(BaseModel):
     session_id: UUID
@@ -166,7 +159,6 @@ class DepartmentCreate(BaseModel):
             raise ValueError("Invalid email address.")
         return v.strip()
 
-
 class DepartmentResponse(BaseModel):
     id: UUID
     name: str
@@ -188,6 +180,57 @@ class DepartmentsAddRequest(BaseModel):
         if len(seen) != len(v):
             raise ValueError("Department names must be unique in this request.")
         return v
+
+SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+class PersonaCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    slug: str = Field(..., min_length=1, max_length=50)
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=200)
+    role_description: str = Field(..., min_length=1, max_length=4000)
+    greeting_text: Optional[str] = Field(None, max_length=500)
+    is_default: bool = False
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not SLUG_RE.match(v):
+            raise ValueError("Slug must be lowercase letters, numbers, and hyphens only (e.g. 'hr', 'product-support').")
+        return v
+
+class PersonaResponse(BaseModel):
+    id: UUID
+    slug: str
+    name: str
+    description: Optional[str] = None
+    is_default: bool
+    is_active: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PersonasAddRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    personas: List[PersonaCreate] = Field(..., min_length=1)
+
+    @field_validator("personas")
+    @classmethod
+    def unique_slugs(cls, v: List[PersonaCreate]) -> List[PersonaCreate]:
+        seen = {p.slug for p in v}
+        if len(seen) != len(v):
+            raise ValueError("Persona slugs must be unique in this request.")
+        return v
+
+class PersonaOption(BaseModel):
+    """Visitor-facing only — used by the widget's picker. Never includes
+    role_description, since that's internal system-prompt text."""
+    slug: str
+    name: str
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
     
 class CompanyCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -211,7 +254,6 @@ class CompanyCreate(BaseModel):
             raise ValueError("Exactly one department must have is_default=True.")
         return self
 
-
 class CompanyResponse(BaseModel):
     id: UUID
     name: str
@@ -221,5 +263,6 @@ class CompanyResponse(BaseModel):
     is_active: bool
     created_at: datetime
     departments: List[DepartmentResponse] = []
+    personas: List[PersonaResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

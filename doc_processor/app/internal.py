@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from .database import get_db
-from .models import Company, Document, CompanyDepartment
-from .schemas import CompanyCreate, CompanyResponse, DepartmentsAddRequest
+from .models import Company, Document, CompanyDepartment, Persona
+from .schemas import CompanyCreate, CompanyResponse, DepartmentsAddRequest, PersonasAddRequest
 from .lead_export import LEADS_DIR
 
 load_dotenv()  # 
@@ -154,6 +154,70 @@ def add_departments(company_id: str, payload: DepartmentsAddRequest, db: Session
     db.refresh(company)
     return company
 
+@router.post(
+    "/companies/{company_id}/personas",
+    response_model=CompanyResponse,
+    status_code=201,
+    dependencies=[Depends(verify_internal_secret)],
+)
+def add_personas(company_id: str, payload: PersonasAddRequest, db: Session = Depends(get_db)):
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found.")
+
+    existing = (
+        db.query(Persona)
+        .filter(Persona.company_id == company_id, Persona.is_active.is_(True))
+        .all()
+    )
+
+    if len(existing) + len(payload.personas) > 10:
+        raise HTTPException(status_code=400, detail="A company may have at most 10 active personas.")
+
+    existing_slugs = {p.slug for p in existing}
+    new_slugs = {p.slug for p in payload.personas}
+    if existing_slugs & new_slugs:
+        raise HTTPException(status_code=400, detail="One or more persona slugs already exist for this company.")
+
+    new_defaults = [p for p in payload.personas if p.is_default]
+    has_existing_default = any(p.is_default for p in existing)
+
+    if has_existing_default and new_defaults:
+        raise HTTPException(
+            status_code=400,
+            detail="This company already has a default persona. Changing the default isn't supported by this endpoint.",
+        )
+    if not has_existing_default and len(new_defaults) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="This company has no default persona yet — exactly one persona in this request must have is_default=True.",
+        )
+
+    for persona in payload.personas:
+        db.add(
+            Persona(
+                company_id=company.id,
+                slug=persona.slug,
+                name=persona.name,
+                description=persona.description,
+                role_description=persona.role_description,
+                greeting_text=persona.greeting_text,
+                is_default=persona.is_default,
+                is_active=True,
+            )
+        )
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Could not add personas: slug conflict or default conflict.",
+        )
+
+    db.refresh(company)
+    return company
 
 @router.get(
     "/leads/{company_id}/download",

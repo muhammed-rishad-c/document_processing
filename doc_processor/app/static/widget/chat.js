@@ -1,6 +1,9 @@
+
 const API_BASE = "http://localhost:9000";
 let sessionId = null;
 let selectedRating = 0;
+let cachedPersonas = [];
+let hasPersonaChoice = false;
 
 function getTenantId() {
   const params = new URLSearchParams(window.location.search);
@@ -12,6 +15,49 @@ function getEmbedOrigin() {
   return params.get("embed_origin");
 }
 
+function getSessionStorageKey() {
+  const tenantId = getTenantId();
+  return `liquidlab_persona_sessions_${tenantId || "default"}`;
+}
+
+function loadSessionMap() {
+  try {
+    return JSON.parse(localStorage.getItem(getSessionStorageKey())) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveSessionForPersona(slug, id) {
+  const key = slug || "__default__";
+  const map = loadSessionMap();
+  map[key] = id;
+  try {
+    localStorage.setItem(getSessionStorageKey(), JSON.stringify(map));
+  } catch (e) { /* storage disabled/full — degrade to always-fresh, no crash */ }
+}
+
+function getSessionForPersona(slug) {
+  const key = slug || "__default__";
+  return loadSessionMap()[key] || null;
+}
+
+function notifyParentSessionActive(id) {
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: "liquidlab-session-created", sessionId: id }, "*");
+  }
+}
+
+async function fetchAndRenderMessages(id) {
+  const res = await fetch(`${API_BASE}/chats/${id}/messages`);
+  if (!res.ok) return false;
+  const messages = await res.json();
+  messages.forEach((m) => renderMessage(m.role, m.content));
+  return true;
+}
+
+let companyName = null;
+
 async function loadCompanyName() {
   const tenantId = getTenantId();
   if (!tenantId) return;
@@ -21,10 +67,74 @@ async function loadCompanyName() {
     });
     if (!res.ok) return;
     const { name } = await res.json();
+    companyName = name;
     document.getElementById("assistant-title").textContent = `${name} Assistant`;
     document.getElementById("query-input").placeholder = `Ask about ${name}...`;
     document.title = `${name} Chat`;
   } catch (e) { /* keep generic labels */ }
+}
+
+async function fetchPersonas() {
+  const tenantId = getTenantId();
+  if (!tenantId) return [];
+  try {
+    const res = await fetch(`${API_BASE}/widget/personas`, {
+      headers: { "X-API-Key": tenantId, "X-Embed-Origin": getEmbedOrigin() || "" },
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) {
+    return [];
+  }
+}
+
+function showPersonaPicker() {
+  document.getElementById("messages").classList.add("hidden");
+  document.getElementById("input-row").classList.add("hidden");
+  document.getElementById("back-btn").classList.add("hidden");
+
+  if (companyName) {
+    document.getElementById("assistant-title").textContent = `${companyName} Assistant`;
+  }
+
+  const optionsDiv = document.getElementById("persona-options");
+  optionsDiv.innerHTML = "";
+  cachedPersonas.forEach((p) => {
+    const btn = document.createElement("button");
+    btn.className = "persona-option";
+    btn.innerHTML = `<span class="persona-option-name">${p.name}</span>` +
+      (p.description ? `<span class="persona-option-desc">${p.description}</span>` : "");
+    btn.addEventListener("click", () => selectPersona(p.slug, p.name));
+    optionsDiv.appendChild(btn);
+  });
+
+  document.getElementById("persona-picker").classList.remove("hidden");
+}
+
+function hidePersonaPicker() {
+  document.getElementById("persona-picker").classList.add("hidden");
+  document.getElementById("messages").classList.remove("hidden");
+  document.getElementById("input-row").classList.remove("hidden");
+  if (hasPersonaChoice) document.getElementById("back-btn").classList.remove("hidden");
+}
+
+async function selectPersona(slug, name) {
+  document.getElementById("messages").innerHTML = "";
+  if (name) document.getElementById("assistant-title").textContent = name;
+  hidePersonaPicker();
+
+  const existingId = getSessionForPersona(slug);
+  if (existingId) {
+    sessionId = existingId;
+    const resumed = await fetchAndRenderMessages(existingId);
+    if (resumed) {
+      notifyParentSessionActive(existingId);
+      return;
+    }
+    // session was deleted/expired server-side — fall through to create fresh
+  }
+
+  await createSession(slug);
 }
 
 function formatText(text) {
@@ -73,7 +183,7 @@ function hideTypingIndicator() {
   if (bubble) bubble.remove();
 }
 
-async function createSession() {
+async function createSession(personaSlug) {
   const tenantId = getTenantId();
   const embedOrigin = getEmbedOrigin();
 
@@ -89,8 +199,10 @@ async function createSession() {
       "X-API-Key": tenantId,
       "X-Embed-Origin": embedOrigin || "",
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify(personaSlug ? { persona_slug: personaSlug } : {}),
   });
+
+
 
   if (!res.ok) {
     renderMessage("assistant", "Sorry, I couldn't start a new conversation. Please try again shortly.");
@@ -100,7 +212,8 @@ async function createSession() {
   const data = await res.json();
   sessionId = data.id;
 
-  // Greeting now comes from the DB (built server-side with the company name)
+  saveSessionForPersona(personaSlug, sessionId);
+
   const msgRes = await fetch(`${API_BASE}/chats/${sessionId}/messages`);
   if (msgRes.ok) (await msgRes.json()).forEach((m) => renderMessage(m.role, m.content));
 
@@ -111,22 +224,54 @@ async function createSession() {
 
 async function loadExistingSession(existingId) {
   sessionId = existingId;
-  const res = await fetch(`${API_BASE}/chats/${sessionId}/messages`);
-  if (!res.ok) {
+
+  cachedPersonas = await fetchPersonas();
+  hasPersonaChoice = cachedPersonas.length > 1;
+
+  const tenantId = getTenantId();
+  const embedOrigin = getEmbedOrigin();
+  let personaSlug = null;
+  try {
+    const sessRes = await fetch(`${API_BASE}/widget/session/${sessionId}`, {
+      headers: { "X-API-Key": tenantId, "X-Embed-Origin": embedOrigin || "" },
+    });
+    if (sessRes.ok) {
+      const sessData = await sessRes.json();
+      personaSlug = sessData.persona_slug;
+      if (sessData.persona_name) {
+        document.getElementById("assistant-title").textContent = sessData.persona_name;
+      }
+    }
+  } catch (e) { /* keep generic title */ }
+
+  if (hasPersonaChoice) document.getElementById("back-btn").classList.remove("hidden");
+
+  saveSessionForPersona(personaSlug, sessionId);
+
+  const ok = await fetchAndRenderMessages(sessionId);
+  if (!ok) {
     await createSession();
-    return;
   }
-  const messages = await res.json();
-  messages.forEach((m) => renderMessage(m.role, m.content));
 }
 
-function initSession() {
+async function initSession() {
   const params = new URLSearchParams(window.location.search);
   const existingId = params.get("sid");
   if (existingId) {
     loadExistingSession(existingId);
-  } else {
+    return;
+  }
+
+  cachedPersonas = await fetchPersonas();
+
+  if (cachedPersonas.length === 0) {
     createSession();
+  } else if (cachedPersonas.length === 1) {
+    hasPersonaChoice = false;
+    selectPersona(cachedPersonas[0].slug, cachedPersonas[0].name);
+  } else {
+    hasPersonaChoice = true;
+    showPersonaPicker();
   }
 }
 
@@ -196,6 +341,13 @@ document.getElementById("query-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendMessage();
 });
 
+
+document.getElementById("back-btn").addEventListener("click", () => {
+  sessionId = null;
+  document.getElementById("messages").innerHTML = "";
+  showPersonaPicker();
+});
+
 document.getElementById("close-btn").addEventListener("click", openFeedback);
 document.getElementById("skip-btn").addEventListener("click", endConversation);
 document.getElementById("submit-feedback-btn").addEventListener("click", submitFeedback);
@@ -209,8 +361,6 @@ document.querySelectorAll(".star").forEach((star) => {
   });
 });
 
-// Parent (widget.js) tells us to reset back to the normal chat view when
-// the visitor reopens the widget after a previous conversation ended.
 window.addEventListener("message", (event) => {
   if (event.data && event.data.type === "liquidlab-resume-chat") {
     document.getElementById("ended-message").classList.add("hidden");
@@ -219,5 +369,7 @@ window.addEventListener("message", (event) => {
   }
 });
 
-loadCompanyName();
-initSession();
+(async () => {
+  await loadCompanyName();
+  await initSession();
+})();

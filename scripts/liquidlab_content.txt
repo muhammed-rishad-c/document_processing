@@ -2913,3 +2913,81 @@ Karnataka 560043
 Working Hours
 10:00 AM
 To 7:00 PM (IST)
+
+
+## Internal HR Policies — LiquidLab (Internal / Employee-Facing)
+Note: This section is internal reference material for LiquidLab employees. It is distinct from "Attendance Management Solutions" above, which is a commercial product LiquidLab builds and sells to client companies — this section is about LiquidLab's own internal workforce policies.
+
+### Leave Policy
+LiquidLab follows a calendar-year leave cycle (January–December).
+Casual Leave (CL): 12 days per year, credited monthly (1/month). Used for short personal needs; requires manager approval, ideally 1 day advance notice.
+Sick Leave (SL): 8 days per year. Medical certificate required for sick leave exceeding 2 consecutive days.
+Earned/Privilege Leave (EL): 15 days per year, accrued after completion of 6 months of service. Unused EL can be carried forward up to 30 days; encashment is allowed once a year during the March payroll cycle, capped at 10 days.
+Maternity Leave: 26 weeks as per the Maternity Benefit Act, applicable to employees with at least 80 days of service in the preceding 12 months.
+Paternity Leave: 10 working days, to be availed within 3 months of the child's birth.
+Bereavement Leave: 5 days for immediate family (spouse, parent, child, sibling).
+Leave without Pay (LWP): Available on manager and HR approval once paid leave balance is exhausted.
+Public Holidays: 10 fixed holidays per year as per the Karnataka state holiday calendar, published every January by HR.
+
+### Work From Home / Hybrid Policy
+LiquidLab operates a hybrid model: 3 days in-office (Tuesday, Wednesday, Thursday) and 2 days flexible WFH (Monday, Friday), for employees based out of the Bengaluru HQ.
+Engineering and delivery teams on active client engagements may be asked to align to client-specific onsite requirements.
+Full-remote arrangements require Reporting Manager + HR sign-off and are evaluated case by case.
+
+### Compensation & Benefits
+Payroll cycle: Salaries are processed on the last working day of each month.
+Provident Fund (PF): Statutory PF contribution at 12% of basic salary, matched by employer contribution, as per EPFO norms.
+Gratuity: Payable after 5 years of continuous service, per the Payment of Gratuity Act.
+Group Health Insurance: Covers employee + spouse + up to 2 children, sum insured ₹5,00,000 per family floater. Parents can be added at employee cost via payroll deduction.
+Group Personal Accident & Term Life Insurance: Provided to all full-time employees at no cost.
+Annual Performance Bonus: Discretionary, linked to appraisal cycle (April) and company performance.
+Referral Bonus: ₹20,000 for a successful referral hire (junior/mid roles), ₹40,000 for senior/specialist roles, paid after the referred employee completes 3 months.
+
+### Reimbursements & Expenses
+Internet/Mobile Reimbursement: Up to ₹1,500/month for employees in hybrid/WFH roles, on submission of bills.
+Travel & Client-Site Expenses: Actuals reimbursed against submitted receipts via the internal expense portal; approval required from Reporting Manager.
+Learning & Certification Reimbursement: Up to ₹25,000/year per employee for approved job-relevant certifications or courses, subject to manager approval.
+
+### Onboarding & Offboarding
+Probation Period: 3 months for all new hires, extendable by 1 month at manager discretion.
+Notice Period: 30 days for employees with less than 2 years of tenure; 60 days for employees at Senior/Lead level and above.
+Exit Process: Full and Final (F&F) settlement is processed within 45 days of last working day, subject to clearance from IT, Admin, and Finance.
+Asset Return: All company assets (laptop, ID card, access cards) must be returned on or before the last working day.
+
+### Code of Conduct & Workplace Policies
+Working Hours: Core hours are 10:00 AM to 7:00 PM IST, Monday to Saturday (alternate Saturdays off per the published holiday calendar).
+POSH Policy: LiquidLab maintains an Internal Committee (IC) for Prevention of Sexual Harassment as per the POSH Act, 2013. Complaints can be raised confidentially to the IC or HR.
+Grievance Redressal: Employees can escalate workplace concerns to their Reporting Manager, or directly to HR if the concern involves the manager.
+Confidentiality: All employees sign an NDA and IP assignment agreement covering client and company confidential information as part of onboarding.
+
+For anything binding — exact leave balances, individual compensation details, or case-specific exceptions — employees should confirm directly with HR rather than relying solely on this assistant.
+
+
+## Careers at LiquidLab — https://trail.liquidlab.in/careers
+LiquidLab is a product engineering company headquartered in Bengaluru, building custom software, IoT/embedded systems, and AI/ML solutions for clients across retail, healthcare, logistics, fintech, and airports — alongside its own IP products in parking guidance, attendance systems, trolley tracking, and telecom QoS.
+
+### Why Work Here
+Cross-domain exposure: engineers rotate across web, mobile, IoT/embedded, and AI/ML projects rather than being siloed into one stack.
+Product + services mix: teams get to ship both client custom-builds and LiquidLab's own hardware-backed products (e.g., the in-house ultrasonic parking sensor board).
+Small-team ownership: flat structure, direct access to leads and architecture decisions even at junior levels.
+
+### Open Roles (Representative — check current openings with HR/Talent Acquisition)
+Software Engineer — Full-Stack (React/Next.js + Node.js)
+Mobile Engineer — React Native / Flutter
+Embedded Systems Engineer — Firmware, UHF RFID, ultrasonic sensor systems
+AI/ML Engineer — NLP, computer vision, MLOps
+DevOps Engineer — CI/CD, Kubernetes, multi-cloud
+QA Engineer — Manual + automated testing across web/mobile/IoT
+Business Development / Pre-Sales Associate
+
+### Hiring Process
+01. Application review
+02. Technical screening (role-specific: coding test, portfolio review, or take-home task)
+03. Technical interview with the relevant engineering lead
+04. Culture-fit conversation with HR
+05. Offer & background verification
+
+### Internship Program
+LiquidLab runs a rolling internship program (3–6 months) across engineering, design, and AI/ML tracks, with a stipend and potential pre-placement offer (PPO) based on performance.
+
+For current openings and applications, candidates can write to careers@liquidlab.in or the general contact channel listed on the Contact page.

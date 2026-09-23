@@ -15,12 +15,21 @@
 
 <body>
   <div id="chat-container">
+    <!-- after -->
     <div id="chat-header">
       <div id="header-title">
         <span id="brand-mark" aria-hidden="true"></span>
         <span id="assistant-title">Assistant</span>
       </div>
-      <button id="close-btn" aria-label="Close chat">✕</button>
+      <div id="header-actions">
+        <button id="back-btn" class="hidden" aria-label="Change topic">←</button>
+        <button id="close-btn" aria-label="Close chat">✕</button>
+      </div>
+    </div>
+
+    <div id="persona-picker" class="hidden">
+      <p id="picker-title">What do you need help with?</p>
+      <div id="persona-options"></div>
     </div>
 
     <div id="messages"></div>

@@ -42,6 +42,7 @@ class ChatSession(Base):
     title = Column(String, nullable=True, default="New Conversation")
     document_id = Column(UUID(as_uuid=True), nullable=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
+    persona_id = Column(UUID(as_uuid=True), ForeignKey("personas.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     awaiting_lead_capture = Column(Boolean, nullable=False, default=False, server_default="false")
@@ -84,6 +85,7 @@ class Company(Base):
     chat_sessions = relationship("ChatSession", back_populates="company", cascade="all, delete-orphan")
     leads = relationship("Lead", back_populates="company", cascade="all, delete-orphan")
     departments = relationship("CompanyDepartment", back_populates="company", cascade="all, delete-orphan")
+    personas = relationship("Persona", back_populates="company", cascade="all, delete-orphan")
 
 
 class CompanyDepartment(Base):
@@ -116,6 +118,37 @@ class CompanyDepartment(Base):
         ),
     )
 
+
+class Persona(Base):
+    __tablename__ = "personas"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    slug = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)  
+    role_description = Column(Text, nullable=False)  
+    greeting_text = Column(Text, nullable=True)
+    is_default = Column(Boolean, nullable=False, default=False, server_default="false")
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    company = relationship("Company", back_populates="personas")
+
+    __table_args__ = (
+        Index(
+            "uq_personas_one_default",
+            "company_id",
+            unique=True,
+            postgresql_where=(is_default == True),
+        ),
+        Index(
+            "uq_personas_slug_per_company",
+            "company_id",
+            "slug",
+            unique=True,
+        ),
+    )
 
 class Lead(Base):
     __tablename__ = "leads"
