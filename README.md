@@ -1,6 +1,6 @@
 # Mini RAG + Chatbot System — LiquidLab
 
-A FastAPI-based Retrieval-Augmented Generation (RAG) chatbot: upload a document, ask questions about it, get answers grounded in retrieved chunks. This README covers the system architecture, the exact end-to-end pipeline (tokenization, chunking, embedding, retrieval, generation), the summary-query classification fix, the widget lead-capture/department-routing feature, and the Day 3 evaluation & optimization work.
+A FastAPI-based Retrieval-Augmented Generation (RAG) chatbot: upload a document, ask questions about it, get answers grounded in retrieved chunks. This README covers the system architecture, the exact end-to-end pipeline (tokenization, chunking, embedding, retrieval, generation), the summary-query classification fix, the widget lead-capture/department-routing feature, the multi-persona widget system (§17), and the Day 3 evaluation & optimization work.
 
 ---
 
@@ -34,16 +34,21 @@ doc_processor/
 │   ├── llm_service.py           # RAG answer generation, summary-query classification, lead extraction,
 │   │                             #   department classification, context building, token usage
 │   ├── analytics.py             # request logging, /analytics aggregation
-│   ├── widget.py                # public widget API: /widget/session, /widget/chat — RAG flow +
-│   │                             #   lead-capture + department classification
+│   ├── widget.py                # public widget API: /widget/session, /widget/chat, /widget/personas,
+│   │                             #   /widget/session/{id} — RAG flow + persona resolution +
+│   │                             #   lead-capture + department classification (see §17)
 │   ├── internal.py              # admin-only API (shared-secret auth): create/list companies,
-│   │                             #   add departments, download leads
+│   │                             #   add departments, add personas, download leads
 │   ├── email_service.py         # SMTP lead-notification email, sent to the resolved department address
 │   ├── lead_export.py           # per-company Excel lead export (append_lead())
 │   ├── rate_limit.py            # slowapi limiter, keyed by API key / session id / IP
-│   ├── models.py / schemas.py / database.py
+│   ├── models.py / schemas.py / database.py   # includes Persona, ChatSession.persona_id (§17)
 │   ├── analytics_log.jsonl      # append-only request/token/timing log
 │   └── token_vectors/           # per-document token+vector CSV exports
+│
+├── widget-frontend/
+│   ├── chat.js                  # session lifecycle, persona picker, persona-scoped session resume (§17)
+│   └── chat.css                 # widget styling, incl. #persona-picker (known gap, §17)
 │
 └── eval/
     ├── eval_dataset.json          # 25-question evaluation set (see §6)
@@ -366,3 +371,43 @@ Per-stage timing, confirmed across ~300+ real requests:
 - **`avg_context_tokens_est` is always 0 in every eval script's output**, including §11's joint grid. Root cause found: `main.py`'s `/documents/chat` endpoint builds `ChunkSource` objects without a `chunk_text` field, even though `chunk_text` is available on the underlying `chunks` list — it's just never copied onto the response. Real context-token and cost figures require adding that field to the schema (see §14, pending).
 - **~1–2% request failure rate (HTTP 500)** observed under sustained sweep load, with no captured error detail.
 - **`widget.py` has no generic-summary overview boost** — bare "summarize" queries there still search on the literal word, unlike the fixed `main.py` path (§5).
+
+---
+
+## 17. Persona System (Multi-Bot per Company)
+
+A single company's widget can offer **multiple named personas** — each with its own tone, greeting, and topic boundaries — all reading from the **same underlying document**. A persona doesn't get a separate knowledge base; it gets a different `role_description` (system-prompt instructions) layered over identical retrieval, so it can choose to answer or refuse a topic while working from the same facts as every other persona on that company.
+
+**Data model.** `Persona` (`models.py`): `company_id`, `slug`, `name`, `description` (nullable — currently unused, see gap below), `role_description`, `greeting_text` (nullable), `is_default`, `is_active`. `ChatSession.persona_id` is a nullable FK — `null` means the session predates personas or the company has none, and both cases fall back to the generic `build_greeting()` / no persona-scoped prompt.
+
+**Backend endpoints:**
+
+| Route                                                | Auth              | Purpose                                                                                        |
+| ----------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /internal/companies/{company_id}/personas`     | `X-Internal-Secret` | Register personas for a company (max 10 active, unique slugs, exactly one `is_default` enforced the same way as departments — see §4) |
+| `GET /widget/personas`                               | `X-API-Key` + origin | Visitor-safe persona list (name, slug, description) for the picker                            |
+| `POST /widget/session`                               | `X-API-Key` + origin | Accepts `persona_slug`; resolves via `_resolve_persona()` (exact slug match, else company default, else `None`) and stores it on the session |
+| `GET /widget/session/{session_id}`                   | `X-API-Key` + origin, scoped to `company_id` | Returns `{session_id, persona_slug, persona_name}` for a given session — added specifically so the frontend can restore persona identity after a page refresh (see gap this closed, below) |
+
+**Flow, end to end:**
+
+1. Widget loads → `GET /widget/personas`. 0 results → skip straight to a generic assistant. 1 result → auto-select it, no picker shown. 2+ → show the picker screen.
+2. Visitor picks a persona (or none) → `POST /widget/session` with `persona_slug` → backend resolves the `Persona` row and stores `persona_id` on the new `ChatSession`.
+3. Every subsequent turn (`POST /widget/chat`, in `_answer_with_rag()`) loads the session's persona and passes `{"name": persona.name, "role_description": persona.role_description}` into `generate_rag_answer_with_memory()`, shaping the system prompt for that reply.
+4. The chat header and "go back" button reflect the active persona; "go back" returns to the picker without ending the underlying company session flow.
+
+**Frontend behavior (`chat.js`):**
+
+- **Per-persona session reuse.** Switching personas no longer always creates a fresh session — `slug → session_id` is tracked in `localStorage` (scoped by tenant), so returning to a persona resumes its prior conversation instead of discarding it. (This supersedes the original "fresh session per persona switch" decision from an earlier pass — see note below.)
+- **Refresh-safe persona identity.** On page load with an existing `sid` in the URL, the frontend now calls `GET /widget/session/{id}` to learn which persona owns that session, and re-applies the same header-title + back-button state that the interactive picker flow sets — closing a gap where a refresh mid-conversation silently reverted the header to the generic company name and hid the back button.
+- **Picker header reset.** `showPersonaPicker()` resets the header back to the generic `"{company} Assistant"` title every time it's shown, so the picker doesn't display a stale persona name left over from whichever bot was last active.
+- **Load-order fix.** `loadCompanyName()` and `initSession()` are now sequenced with `await` rather than fired in parallel, eliminating a race where the generic company title could overwrite a correctly-restored persona title depending on which network request happened to resolve last.
+
+**Design decision — superseded.** An earlier pass explicitly chose "fresh session per persona switch" as the shipped behavior for handling persona switches. Real usage showed visitors bouncing between personas and expecting continuity, so this was walked back to per-persona session reuse (above). Persona *isolation* is unaffected — two personas still never share a session — only the "discard on switch" behavior changed.
+
+**Known gaps:**
+- **No persona update/patch endpoint** — only add. All persona `description` fields are currently `null`, so picker buttons show name-only with no subtitle. Adding one would need to decide whether it accepts partial updates and how it interacts with the slug-uniqueness/single-default constraints `add_personas` already enforces.
+- **`cachedPersonas` is fetched once per page load.** If an admin adds a new persona while a visitor already has the widget open, they won't see it until they reload. Accepted as a known limitation, not currently fixed.
+- **`#persona-picker`'s `top: 53px` in `chat.css` is a hardcoded header-height guess**, not computed from the actual header element. More likely to matter now that persona names vary widely in length (e.g. `"LiquidLab Assistant"` vs. `"Priya from LiquidLab HR"`), which could wrap the header on narrow screens and throw the fixed offset off.
+- **`GET /chats/{session_id}/messages` has no auth check** — no `X-API-Key`/origin header required, just a bare session ID, so anyone holding or guessing a session UUID can read its message history. Pre-dates the persona work, but now more load-bearing since persona-switch resume calls it more frequently.
+- **No server-side concept of a "closed" session.** Ending a conversation (rating + `endConversation()`) doesn't clear that persona's `localStorage` entry, so reopening the widget later can silently resume an already-ended conversation rather than starting fresh.
