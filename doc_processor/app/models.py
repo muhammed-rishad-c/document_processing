@@ -29,6 +29,10 @@ class DocumentChunk(Base):
     is_parent = Column(Boolean, nullable=False, default=False, server_default="false")
     parent_index = Column(Integer, nullable=True)
 
+    source_product_id = Column(String, nullable=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
+    content_type = Column(String, nullable=True)
+
     document = relationship("Document", back_populates="chunks")
     
     __table_args__ = (
@@ -86,6 +90,7 @@ class Company(Base):
     leads = relationship("Lead", back_populates="company", cascade="all, delete-orphan")
     departments = relationship("CompanyDepartment", back_populates="company", cascade="all, delete-orphan")
     personas = relationship("Persona", back_populates="company", cascade="all, delete-orphan")
+    data_sources = relationship("CompanyDataSource", back_populates="company", cascade="all, delete-orphan")
 
 
 class CompanyDepartment(Base):
@@ -173,3 +178,13 @@ class Lead(Base):
 
     company = relationship("Company", back_populates="leads")
     department = relationship("CompanyDepartment", back_populates="leads")
+    
+class CompanyDataSource(Base):
+    __tablename__ = "company_data_sources"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    source_table = Column(String, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    company = relationship("Company", back_populates="data_sources")

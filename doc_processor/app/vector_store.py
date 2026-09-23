@@ -78,6 +78,7 @@ def store_chunk_vector(chunks_data: list[dict]):
                     "page_content": str(chunk["chunk_text"]),
                     "metadata": {
                         "document_id": str(chunk["document_id"]),
+                        "company_id": str(chunk["company_id"]) if chunk.get("company_id") else None,
                         "chunk_index": int(chunk["chunk_index"]),
                         "parent_index": int(chunk["parent_index"]),
                         "token_count": int(chunk["token_count"]),
@@ -109,22 +110,29 @@ PARENT_CONTEXT_BUDGET = 2500
 def search_similar_chunks(query_text: str,
                            top_k: int = 10,
                            document_id: str = None,
+                           company_id: str = None,
                            db_session=None,
                            timing_out: dict | None = None) -> list[dict]:
     t_embed_start = time.perf_counter()
     query_vector = get_embedding(query_text)
     t_embed_end = time.perf_counter()
 
-    query_filter = None
+    filter_conditions = []
     if document_id and str(document_id).strip().lower() not in ["", "null", "undefined", "none"]:
-        query_filter = Filter(
-            must=[  
-                FieldCondition(
-                    key="metadata.document_id",
-                    match=MatchValue(value=str(document_id).strip())
-                )
-            ]
+        filter_conditions.append(
+            FieldCondition(
+                key="metadata.document_id",
+                match=MatchValue(value=str(document_id).strip())
+            )
         )
+    if company_id and str(company_id).strip().lower() not in ["", "null", "undefined", "none"]:
+        filter_conditions.append(
+            FieldCondition(
+                key="metadata.company_id",
+                match=MatchValue(value=str(company_id).strip())
+            )
+        )
+    query_filter = Filter(must=filter_conditions) if filter_conditions else None
 
     t_search_start = time.perf_counter()
     try:

@@ -70,14 +70,12 @@ AUTO_LEAD_FORWARDED_TEXT = (
     "they'll follow up if needed."
 )
 
-
 def _session_ip_backstop(request: Request):
     pass
 
 _session_ip_backstop = limiter.limit("60/minute", key_func=get_remote_address)(_session_ip_backstop)
 
 router = APIRouter(prefix="/widget", tags=["public-widget"])
-
 
 def _check_origin_and_allow(request: Request, response: Response, company: Company):
     
@@ -90,7 +88,6 @@ def _check_origin_and_allow(request: Request, response: Response, company: Compa
     response.headers["Access-Control-Allow-Origin"] = browser_origin
     response.headers["Vary"] = "Origin"
 
-
 def get_company_from_api_key(
     request: Request,
     response: Response,
@@ -102,7 +99,6 @@ def get_company_from_api_key(
         raise HTTPException(status_code=401, detail="Invalid API key.")
     _check_origin_and_allow(request, response, company)
     return company
-
 
 def _load_pending_lead(session: ChatSession) -> dict:
     
@@ -132,7 +128,6 @@ def _load_pending_lead(session: ChatSession) -> dict:
     except Exception:
         return empty
 
-
 def _save_pending_lead(session: ChatSession, question: str, resolved_question: str, category_name, name, email, phone) -> None:
     session.pending_lead_query = json.dumps(
         {
@@ -152,7 +147,6 @@ def _get_active_departments(db: Session, company_id) -> list[CompanyDepartment]:
         .all()
     )
 
-
 def _resolve_department(db: Session, company: Company, category_name: str | None):
     
     departments = _get_active_departments(db, company.id)
@@ -168,14 +162,12 @@ def _resolve_department(db: Session, company: Company, category_name: str | None
 
     return None, None
 
-
 def _get_active_personas(db: Session, company_id) -> list[Persona]:
     return (
         db.query(Persona)
         .filter(Persona.company_id == company_id, Persona.is_active.is_(True))
         .all()
     )
-
 
 def _resolve_persona(db: Session, company: Company, persona_slug: str | None) -> Persona | None:
     personas = _get_active_personas(db, company.id)
@@ -231,6 +223,7 @@ def _answer_with_rag(
         query_text=payload.query,
         top_k=7,
         document_id=str(company.document_id),
+        company_id=str(company.id),
         db_session=db,
         timing_out=stage_timings,
     )
