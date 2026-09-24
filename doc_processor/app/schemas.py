@@ -235,7 +235,7 @@ class PersonaOption(BaseModel):
 class CompanyCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
-    document_id: UUID
+    document_id: Optional[UUID] = None
     allowed_origins: List[str]
     departments: List[DepartmentCreate] = Field(..., min_length=1, max_length=10)
 
@@ -258,7 +258,6 @@ class CompanyResponse(BaseModel):
     id: UUID
     name: str
     tenant_id: str
-    document_id: UUID
     allowed_origins: List[str]
     is_active: bool
     created_at: datetime

@@ -20,8 +20,14 @@ from .models import (
     DocumentChunk,
     ChatSession,
     ChatMessage,
-    Company
+    Company,
+    CompanyDataSource
 )
+from .db_sync import sync_company_data_source
+from apscheduler.schedulers.background import BackgroundScheduler
+import threading
+import select
+import psycopg2
 from .schemas import (
     DocumentResponse,
     DocumentDetailResponse,
@@ -115,10 +121,104 @@ GREETING_TEXT = "Hi! I'm your assistant. Ask me anything about your documents."
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+DB_SYNC_INTERVAL_MINUTES = int(os.getenv("DB_SYNC_INTERVAL_MINUTES", "20"))
+_scheduler = BackgroundScheduler()
+
+def _run_all_company_data_source_syncs() -> None:
+    db = Sessionlocal()
+    try:
+        for source in db.query(CompanyDataSource).filter(CompanyDataSource.is_active.is_(True)).all():
+            try:
+                summary = sync_company_data_source(db, source)
+                print(f"[db_sync] company={source.company_id} table={source.source_table} {summary}")
+            except Exception as e:
+                db.rollback()
+                print(f"[db_sync] FAILED company={source.company_id} table={source.source_table}: {e}")
+    finally:
+        db.close()
+
 @app.on_event("startup")
 def startup_event():
     init_qdrant()
-    
+    _scheduler.add_job(
+        _run_all_company_data_source_syncs, "interval",
+        minutes=DB_SYNC_INTERVAL_MINUTES, id="company_data_source_sync", replace_existing=True,
+    )
+    _scheduler.start()
+
+    global _listener_thread
+    _listener_thread = threading.Thread(target=_listen_for_data_changes, daemon=True)
+    _listener_thread.start()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    _scheduler.shutdown(wait=False)
+    _stop_listener.set()
+  
+_pending_tables: set[str] = set()
+_pending_lock = threading.Lock()
+_flush_timer: threading.Timer | None = None
+_stop_listener = threading.Event()
+_listener_thread: threading.Thread | None = None
+
+def _flush_pending_syncs() -> None:
+    with _pending_lock:
+        tables = list(_pending_tables)
+        _pending_tables.clear()
+    if not tables:
+        return
+    db = Sessionlocal()
+    try:
+        sources = (
+            db.query(CompanyDataSource)
+            .filter(CompanyDataSource.source_table.in_(tables), CompanyDataSource.is_active.is_(True))
+            .all()
+        )
+        for source in sources:
+            try:
+                summary = sync_company_data_source(db, source)
+                print(f"[db_sync:event] company={source.company_id} table={source.source_table} {summary}")
+            except Exception as e:
+                db.rollback()
+                print(f"[db_sync:event] FAILED {source.company_id}/{source.source_table}: {e}")
+    finally:
+        db.close()
+
+def _schedule_flush() -> None:
+    """Debounce: (re)start a 2-second timer every time a notification comes
+    in, so a burst of N row changes triggers one sync, not N syncs."""
+    global _flush_timer
+    if _flush_timer is not None:
+        _flush_timer.cancel()
+    _flush_timer = threading.Timer(2.0, _flush_pending_syncs)
+    _flush_timer.daemon = True
+    _flush_timer.start()
+
+def _listen_for_data_changes() -> None:
+    """Runs in a background thread for the life of the app. Holds one
+    dedicated Postgres connection in LISTEN mode and reacts to pg_notify()
+    calls fired by the trigger on each registered source table."""
+    while not _stop_listener.is_set():
+        try:
+            raw = engine.raw_connection()
+            conn = raw.connection  # underlying psycopg2 connection
+            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+            cur = conn.cursor()
+            cur.execute("LISTEN company_data_sync;")
+            print("[db_sync:event] listening for company_data_sync notifications")
+
+            while not _stop_listener.is_set():
+                if select.select([conn], [], [], 5) == ([], [], []):
+                    continue
+                conn.poll()
+                while conn.notifies:
+                    notify = conn.notifies.pop(0)
+                    with _pending_lock:
+                        _pending_tables.add(notify.payload)
+                    _schedule_flush()
+        except Exception as e:
+            print(f"[db_sync:event] listener error, reconnecting in 5s: {e}")
+            _stop_listener.wait(5)  
       
 @app.middleware("http")
 async def analytics_middleware(request: Request, call_next):
@@ -153,7 +253,6 @@ def _run_chunk_token_sequence_report(chunks: list[dict], output_path: str, doc_i
         print(f"[background] WARNING: failed to generate chunk token sequence CSV "
               f"for doc {doc_id}: {str(e)}")
 
-
 def _run_tier3_structure_background(doc_id, extracted_text: str, page_count) -> None:
     
     try:
@@ -177,8 +276,7 @@ def _run_tier3_structure_background(doc_id, extracted_text: str, page_count) -> 
         print(f"[background] Failed to persist Tier 3 structure for doc {doc_id}: {e}")
     finally:
         db.close()
-         
-        
+           
 @app.get("/analytics")
 def get_analytics():
     return analytics.build_summary()
@@ -320,7 +418,6 @@ async def upload_document(
         "message": "Document successfully processed, chunked, embedded, and stored in PostgreSQL & Qdrant."
     }
     
-    
 @app.get("/documents/{doc_id}", response_model=DocumentDetailResponse)
 def get_document(doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
@@ -333,10 +430,13 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found.")
-
-    affected_companies = db.query(Company).filter(Company.document_id == doc_id).all()
+ 
+    new_link_company = (
+        db.query(Company).filter(Company.id == doc.company_id).first()
+        if doc.company_id else None
+    )
+    affected_companies = [new_link_company] if new_link_company else []
     
-    # Extract IDs *before* deletion so we can safely return them later
     cascade_company_ids = [str(c.id) for c in affected_companies]
 
     if affected_companies:
@@ -384,7 +484,6 @@ def semantic_search(request: SemanticSearchRequest, db: Session = Depends(get_db
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
     
-
 @app.post("/documents/chat",response_model=RAGResponse)
 def chat_with_document(payload:RAGRequest,request:Request,db: Session = Depends(get_db)):
     try:
@@ -452,7 +551,6 @@ def chat_with_document(payload:RAGRequest,request:Request,db: Session = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-    
 @app.post("/chats", response_model=ChatSessionResponse, status_code=status.HTTP_201_CREATED)
 def create_chat_session(payload: ChatSessionCreate, db: Session = Depends(get_db)):
     doc_uuid = UUID(payload.document_id) if payload.document_id else None
@@ -474,7 +572,6 @@ def create_chat_session(payload: ChatSessionCreate, db: Session = Depends(get_db
     db.commit()
 
     return session
-
 
 @app.get("/chats/{session_id}/messages", response_model=list[ChatMessageResponse])
 def get_chat_messages(session_id: UUID, db: Session = Depends(get_db)):

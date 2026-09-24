@@ -15,8 +15,12 @@ class Document(Base):
     extracted_text = Column(Text, nullable=False)
     stats = Column(JSONB, nullable=False)
     structure = Column(JSONB, nullable=True) 
+
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
+    source_type = Column(String, nullable=False, default="upload", server_default="upload")
     
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    company = relationship("Company", back_populates="documents", foreign_keys=[company_id])
     
 class DocumentChunk(Base):
     __tablename__ = "document_chunk"
@@ -81,7 +85,6 @@ class Company(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     tenant_id = Column(String, nullable=False, unique=True, index=True)
-    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
     allowed_origins = Column(JSONB, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -91,7 +94,7 @@ class Company(Base):
     departments = relationship("CompanyDepartment", back_populates="company", cascade="all, delete-orphan")
     personas = relationship("Persona", back_populates="company", cascade="all, delete-orphan")
     data_sources = relationship("CompanyDataSource", back_populates="company", cascade="all, delete-orphan")
-
+    documents = relationship("Document", back_populates="company", foreign_keys="[Document.company_id]")
 
 class CompanyDepartment(Base):
 
@@ -122,7 +125,6 @@ class CompanyDepartment(Base):
             unique=True,
         ),
     )
-
 
 class Persona(Base):
     __tablename__ = "personas"

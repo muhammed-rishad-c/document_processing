@@ -39,11 +39,13 @@ def backfill_company_id_on_chunks(db: Session, document_id, company_id) -> int:
 
     qdrant.set_payload(
         collection_name=COLLECTION_NAME,
-        payload={"metadata.company_id": str(company_id)},
+        payload={"company_id": str(company_id)},
         points=Filter(
             must=[FieldCondition(key="metadata.document_id", match=MatchValue(value=str(document_id)))]
         ),
+        key="metadata",
     )
+    return len(chunks)
     return len(chunks)
 
 
@@ -64,19 +66,19 @@ def verify_internal_secret(x_internal_secret: str = Header(...)):
     dependencies=[Depends(verify_internal_secret)],
 )
 def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
-    document = db.query(Document).filter(Document.id == payload.document_id).first()
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found.")
+    if payload.document_id is not None:
+        document = db.query(Document).filter(Document.id == payload.document_id).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found.")
 
     company = Company(
         name=payload.name,
         tenant_id=secrets.token_urlsafe(32),
-        document_id=payload.document_id,
         allowed_origins=payload.allowed_origins,
         is_active=True,
     )
     db.add(company)
-    db.flush()  
+    db.flush()
 
     for dept in payload.departments:
         db.add(
@@ -101,7 +103,11 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 
     db.refresh(company)
 
-    backfill_company_id_on_chunks(db, document_id=payload.document_id, company_id=company.id)
+    if payload.document_id is not None:
+        document.company_id = company.id
+        db.add(document)
+        db.commit()
+        backfill_company_id_on_chunks(db, document_id=payload.document_id, company_id=company.id)
 
     return company
 

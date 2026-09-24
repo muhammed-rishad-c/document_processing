@@ -201,13 +201,18 @@ def _answer_with_rag(
     
     structural = classify_structural_query(payload.query)
     if structural["is_structural"]:
-        doc = db.query(Document).filter(Document.id == company.document_id).first()
-        answer_text = answer_structural_query(structural["kind"], doc.structure if doc else None)
-        user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
-        assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
-        db.add_all([user_msg, assistant_msg])
-        db.commit()
-        return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
+        structured_docs = (
+            db.query(Document)
+            .filter(Document.company_id == company.id, Document.structure.isnot(None))
+            .all()
+        )
+        if len(structured_docs) == 1:
+            answer_text = answer_structural_query(structural["kind"], structured_docs[0].structure)
+            user_msg = ChatMessage(session_id=payload.session_id, role="user", content=payload.query)
+            assistant_msg = ChatMessage(session_id=payload.session_id, role="assistant", content=answer_text)
+            db.add_all([user_msg, assistant_msg])
+            db.commit()
+            return WidgetChatResponse(session_id=payload.session_id, answer=answer_text)
 
 
     if classify_summary_query(payload.query)["is_summary"] and classify_summary_target(payload.query) == "chat":
@@ -222,7 +227,6 @@ def _answer_with_rag(
     retrieved_chunks = search_similar_chunks(
         query_text=payload.query,
         top_k=7,
-        document_id=str(company.document_id),
         company_id=str(company.id),
         db_session=db,
         timing_out=stage_timings,
@@ -359,7 +363,6 @@ def create_widget_session(
 
     session = ChatSession(
         title=payload.title,
-        document_id=company.document_id,
         company_id=company.id,
         persona_id=persona.id if persona else None,
     )

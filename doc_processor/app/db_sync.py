@@ -15,16 +15,14 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
-from .models import DocumentChunk, CompanyDataSource, Company
-from .service import count_token
+from .models import DocumentChunk, CompanyDataSource, Company, Document
+from .service import count_token, chunk_text_parent_child
 from .vector_store import store_chunk_vector, qdrant, COLLECTION_NAME
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-# Same namespace convention used elsewhere for deterministic UUIDs from strings.
 _CHUNK_NAMESPACE = uuid.NAMESPACE_DNS
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-
 
 def _format_row_chunk_text(row: dict) -> str:
     """Generic row -> chunk text formatter. No changes needed when a new
@@ -35,45 +33,75 @@ def _format_row_chunk_text(row: dict) -> str:
         lines.append(f"{key.replace('_', ' ').capitalize()}: {value}")
     return "\n".join(lines)
 
+def _delete_row_chunks(db_session, company_id, row_pk) -> None:
+    """Deletes this row's existing chunks from Postgres and their matching
+    vectors from Qdrant, by chunk_id. Needed before rebuilding a row's
+    chunks, because a row that changes length can split into a *different*
+    number of parent/child pieces between syncs — old point ids from the
+    previous split won't be overwritten by the new ones, so they'd be left
+    behind as orphaned vectors if we didn't delete them explicitly first."""
+    existing_children = (
+        db_session.query(DocumentChunk)
+        .filter(
+            DocumentChunk.company_id == company_id,
+            DocumentChunk.source_product_id == row_pk,
+            DocumentChunk.is_parent == False,
+        )
+        .all()
+    )
+    for child in existing_children:
+        qdrant.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=Filter(
+                must=[FieldCondition(key="metadata.chunk_id", match=MatchValue(value=str(child.id)))]
+            ),
+        )
+    db_session.query(DocumentChunk).filter(
+        DocumentChunk.company_id == company_id,
+        DocumentChunk.source_product_id == row_pk,
+    ).delete(synchronize_session=False)
 
 def _chunk_uuid_for_row(company_id, row_pk) -> uuid.UUID:
     return uuid.uuid5(_CHUNK_NAMESPACE, f"product:{company_id}:{row_pk}")
 
+def _get_or_create_db_source_document(db_session, company_id) -> uuid.UUID:
+    """One shared Document per company for all its synced product data
+    (source_type='db_source'), reused across every CompanyDataSource row
+    that company has. Created lazily on first sync."""
+    doc = (
+        db_session.query(Document)
+        .filter(Document.company_id == company_id, Document.source_type == "db_source")
+        .first()
+    )
+    if doc is not None:
+        return doc.id
+
+    company = db_session.query(Company).filter(Company.id == company_id).first()
+    if company is None:
+        raise ValueError(f"Cannot create db_source Document: company {company_id} not found.")
+
+    doc = Document(
+        filename=f"{company.name} — synced product data",
+        file_type="db_source",
+        extracted_text="",
+        stats={},
+        structure=None,
+        company_id=company_id,
+        source_type="db_source",
+    )
+    db_session.add(doc)
+    db_session.flush()  # assigns doc.id without committing yet
+    return doc.id
 
 def sync_company_data_source(db_session, source: CompanyDataSource) -> dict:
-    """
-    1. SELECT * FROM {source.source_table} WHERE updated_at > last_synced_at
-    2. For each changed row: format text, compute a deterministic chunk_uuid,
-       upsert the DocumentChunk parent+child pair, upsert the matching Qdrant
-       point (same point_id as the child chunk_uuid -> true upsert).
-    3. Diff current source-table PKs against previously-synced
-       source_product_id values for this company on this table; delete
-       DocumentChunk rows (and their Qdrant points) for PKs no longer
-       present -> handles deletes.
-    4. Update source.last_synced_at = now(). Commit.
-
-    `source.source_table` is only ever read from the CompanyDataSource row
-    (never from request input), so this is safe to interpolate into the
-    query — see the safety note on CompanyDataSource in models.py.
-    """
+    
     table = source.source_table
     since = source.last_synced_at or EPOCH
 
-    # Phase 1 ships against today's single-document schema: product chunks
-    # are bucketed under the company's existing Document (see the plan's
-    # Phase 2 sequencing note). Phase 2 later gives the product catalog its
-    # own real Document row per company — a follow-up, not a Phase 1 change.
-    company = db_session.query(Company).filter(Company.id == source.company_id).first()
-    if company is None or company.document_id is None:
-        raise ValueError(
-            f"CompanyDataSource {source.id}: company {source.company_id} has no "
-            "document_id to bucket synced chunks under. A company must have a "
-            "Document (via the normal upload flow) before it can sync a data source."
-        )
-    document_id = company.document_id
+    document_id = _get_or_create_db_source_document(db_session, source.company_id)
 
     changed_rows = db_session.execute(
-        text(f'SELECT * FROM "{table}" WHERE updated_at > :since'),  # nosec: table name is trusted (see models.py)
+        text(f'SELECT * FROM "{table}" WHERE updated_at > :since'), 
         {"since": since},
     ).mappings().all()
 
@@ -87,58 +115,63 @@ def sync_company_data_source(db_session, source: CompanyDataSource) -> dict:
         row_pk = str(row["id"])
         synced_pks.add(row_pk)
 
-        chunk_uuid = _chunk_uuid_for_row(source.company_id, row_pk)
-        chunk_text = _format_row_chunk_text(row)
-        token_count = count_token(chunk_text)
+        chunk_text_full = _format_row_chunk_text(row)
         content_type = row.get("content_type")
 
-        # Delete-then-recreate the parent+child pair for this row's
-        # deterministic id, so re-sync of a changed row is a clean
-        # replace rather than an accumulation of stale rows.
-        db_session.query(DocumentChunk).filter(
-            DocumentChunk.company_id == source.company_id,
-            DocumentChunk.source_product_id == row_pk,
-        ).delete(synchronize_session=False)
+        _delete_row_chunks(db_session, source.company_id, row_pk)
 
-        parent_chunk = DocumentChunk(
-            id=uuid.uuid4(),
-            document_id=document_id,
-            chunk_index=chunk_uuid.int % (2**31),
-            chunk_text=chunk_text,
-            token_count=token_count,
-            is_parent=True,
-            parent_index=None,
-            source_product_id=row_pk,
-            company_id=source.company_id,
-            content_type=content_type,
-        )
-        db_chunks_to_add.append(parent_chunk)
 
-        child_chunk = DocumentChunk(
-            id=chunk_uuid,
-            document_id=document_id,
-            chunk_index=chunk_uuid.int % (2**31),
-            chunk_text=chunk_text,
-            token_count=token_count,
-            is_parent=False,
-            parent_index=parent_chunk.chunk_index,
-            source_product_id=row_pk,
-            company_id=source.company_id,
-            content_type=content_type,
-        )
-        db_chunks_to_add.append(child_chunk)
+        pieces = chunk_text_parent_child(chunk_text_full)
 
-        vector_data.append({
-            "point_id": chunk_uuid,
-            "document_id": document_id,
-            "company_id": source.company_id,
-            "chunk_index": child_chunk.chunk_index,
-            "chunk_text": chunk_text,
-            "token_count": token_count,
-            "parent_index": parent_chunk.chunk_index,
-            "is_parent": False,
-            "embedding": None,  # filled in below via batch embedding
-        })
+        local_parent_global_index = {}
+        for piece in pieces:
+            if not piece["is_parent"]:
+                continue
+            parent_uuid = uuid.uuid4()
+            global_idx = parent_uuid.int % (2**31)
+            local_parent_global_index[piece["chunk_index"]] = global_idx
+            db_chunks_to_add.append(DocumentChunk(
+                id=parent_uuid,
+                document_id=document_id,
+                chunk_index=global_idx,
+                chunk_text=piece["chunk_text"],
+                token_count=piece["token_count"],
+                is_parent=True,
+                parent_index=None,
+                source_product_id=row_pk,
+                company_id=source.company_id,
+                content_type=content_type,
+            ))
+
+        for piece in pieces:
+            if piece["is_parent"]:
+                continue
+            child_uuid = uuid.uuid4()
+            global_parent_idx = local_parent_global_index[piece["parent_index"]]
+            child_chunk = DocumentChunk(
+                id=child_uuid,
+                document_id=document_id,
+                chunk_index=child_uuid.int % (2**31),
+                chunk_text=piece["chunk_text"],
+                token_count=piece["token_count"],
+                is_parent=False,
+                parent_index=global_parent_idx,
+                source_product_id=row_pk,
+                company_id=source.company_id,
+                content_type=content_type,
+            )
+            db_chunks_to_add.append(child_chunk)
+            vector_data.append({
+                "point_id": child_uuid,
+                "document_id": document_id,
+                "company_id": source.company_id,
+                "chunk_index": child_chunk.chunk_index,
+                "chunk_text": piece["chunk_text"],
+                "token_count": piece["token_count"],
+                "parent_index": global_parent_idx,
+                "is_parent": False,
+                "embedding": None,
+            })
         rows_upserted += 1
 
     if vector_data:

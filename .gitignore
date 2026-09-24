@@ -31,4 +31,5 @@ doc_processor/app/feedback_log.jsonl
 doc_processor/app/debug_last_chunks.json
 qdrant_storage/
 doc_processor/app/leads/
+scripts/
 
