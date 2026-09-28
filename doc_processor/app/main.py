@@ -23,7 +23,7 @@ from .models import (
     Company,
     CompanyDataSource
 )
-from .db_sync import sync_company_data_source
+from .db_sync import sync_company_data_source, sync_data_source, acquire_sync_lease, release_sync_lease
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 import select
@@ -128,12 +128,17 @@ def _run_all_company_data_source_syncs() -> None:
     db = Sessionlocal()
     try:
         for source in db.query(CompanyDataSource).filter(CompanyDataSource.is_active.is_(True)).all():
+            if not acquire_sync_lease(db, source):
+                print(f"[db_sync] skipped company={source.company_id} source={source.id} — lease held")
+                continue
             try:
-                summary = sync_company_data_source(db, source)
-                print(f"[db_sync] company={source.company_id} table={source.source_table} {summary}")
+                summary = sync_data_source(db, source)
+                print(f"[db_sync] company={source.company_id} type={source.source_type} {summary}")
             except Exception as e:
                 db.rollback()
-                print(f"[db_sync] FAILED company={source.company_id} table={source.source_table}: {e}")
+                print(f"[db_sync] FAILED company={source.company_id} type={source.source_type}: {e}")
+            finally:
+                release_sync_lease(db, source)
     finally:
         db.close()
 
@@ -172,15 +177,20 @@ def _flush_pending_syncs() -> None:
         sources = (
             db.query(CompanyDataSource)
             .filter(CompanyDataSource.source_table.in_(tables), CompanyDataSource.is_active.is_(True))
-            .all()
+            .all() 
         )
         for source in sources:
+            if not acquire_sync_lease(db, source):
+                print(f"[db_sync:event] skipped company={source.company_id} — lease held")
+                continue
             try:
-                summary = sync_company_data_source(db, source)
+                summary = sync_data_source(db, source)
                 print(f"[db_sync:event] company={source.company_id} table={source.source_table} {summary}")
             except Exception as e:
                 db.rollback()
                 print(f"[db_sync:event] FAILED {source.company_id}/{source.source_table}: {e}")
+            finally:
+                release_sync_lease(db, source)
     finally:
         db.close()
 
@@ -430,7 +440,7 @@ def delete_document(doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found.")
- 
+  
     new_link_company = (
         db.query(Company).filter(Company.id == doc.company_id).first()
         if doc.company_id else None

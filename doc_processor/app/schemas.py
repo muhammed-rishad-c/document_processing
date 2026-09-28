@@ -265,3 +265,66 @@ class CompanyResponse(BaseModel):
     personas: List[PersonaResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+    
+class MongoContentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(..., min_length=1, max_length=300)
+    body: str = Field("", max_length=20000)
+    content_type: str = Field("general", max_length=50)
+    extra: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("title")
+    @classmethod
+    def strip_title(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Title cannot be blank.")
+        return v
+
+    @field_validator("extra")
+    @classmethod
+    def no_operator_keys(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        """Plan section 12: reject '$'-prefixed or dotted keys anywhere in
+        extra, so nothing here can be interpreted as a Mongo operator."""
+        def _check(d: Dict[str, Any]) -> None:
+            for key, value in d.items():
+                if key.startswith("$") or "." in key:
+                    raise ValueError(f"Invalid key in extra: '{key}' (no '$' prefix or '.' allowed).")
+                if isinstance(value, dict):
+                    _check(value)
+        _check(v or {})
+        return v
+
+class MongoContentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: Optional[str] = Field(None, min_length=1, max_length=300)
+    body: Optional[str] = Field(None, max_length=20000)
+    content_type: Optional[str] = Field(None, max_length=50)
+    extra: Optional[Dict[str, Any]] = None
+
+    @field_validator("title")
+    @classmethod
+    def strip_title(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Title cannot be blank.")
+        return v
+
+    @field_validator("extra")
+    @classmethod
+    def no_operator_keys(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if v is None:
+            return v
+        def _check(d: Dict[str, Any]) -> None:
+            for key, value in d.items():
+                if key.startswith("$") or "." in key:
+                    raise ValueError(f"Invalid key in extra: '{key}' (no '$' prefix or '.' allowed).")
+                if isinstance(value, dict):
+                    _check(value)
+        _check(v)
+        return v
+
+class MongoContentResponse(BaseModel):
+    id: str

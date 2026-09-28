@@ -36,6 +36,11 @@ class DocumentChunk(Base):
     source_product_id = Column(String, nullable=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
     content_type = Column(String, nullable=True)
+    data_source_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("company_data_sources.id", ondelete="CASCADE"),
+        nullable=True,
+    )
 
     document = relationship("Document", back_populates="chunks")
     
@@ -185,8 +190,16 @@ class CompanyDataSource(Base):
     __tablename__ = "company_data_sources"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
-    source_table = Column(String, nullable=False)
+    source_table = Column(String, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     company = relationship("Company", back_populates="data_sources")
+    
+    source_type = Column(String, nullable=False, server_default="postgres")
+    collection_name = Column(String, nullable=True)
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    last_status = Column(String, nullable=True)
+    last_error = Column(Text, nullable=True)
+    last_full_reconcile_at = Column(DateTime(timezone=True), nullable=True)
+    sync_locked_until = Column(DateTime(timezone=True), nullable=True)

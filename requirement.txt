@@ -23,3 +23,5 @@ slowapi
 openpyxl
 langchain-pymupdf4llm
 apscheduler
+dnspython==2.8.0
+pymongo==4.18.1

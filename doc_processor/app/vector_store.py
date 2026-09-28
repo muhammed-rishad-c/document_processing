@@ -104,7 +104,20 @@ def delete_vector(doc_id: str):
         )
     )
 
-
+def delete_vectors_by_company(company_id: str) -> None:
+    """Remove every Qdrant point belonging to one company."""
+    qdrant.delete(
+        collection_name=COLLECTION_NAME,
+        points_selector=Filter(
+            must=[
+                FieldCondition(
+                    key="metadata.company_id",
+                    match=MatchValue(value=str(company_id)),
+                )
+            ]
+        ),
+    )
+    
 PARENT_CONTEXT_BUDGET = 2500  
 
 def search_similar_chunks(query_text: str,
