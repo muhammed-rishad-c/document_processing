@@ -24,6 +24,7 @@ from .models import (
     CompanyDataSource
 )
 from .db_sync import sync_company_data_source, sync_data_source, acquire_sync_lease, release_sync_lease
+from .mongo_listener import start_mongo_listener, stop_mongo_listener
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 import select
@@ -155,10 +156,13 @@ def startup_event():
     _listener_thread = threading.Thread(target=_listen_for_data_changes, daemon=True)
     _listener_thread.start()
 
+    start_mongo_listener()
+
 @app.on_event("shutdown")
 def shutdown_event():
     _scheduler.shutdown(wait=False)
     _stop_listener.set()
+    stop_mongo_listener()
   
 _pending_tables: set[str] = set()
 _pending_lock = threading.Lock()
