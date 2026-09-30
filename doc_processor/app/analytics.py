@@ -6,14 +6,11 @@ from datetime import datetime, timezone
 ANALYTICS_LOG_PATH = Path(__file__).resolve().parent / "analytics_log.jsonl"
 _write_lock = threading.Lock()
 
-
 PRICE_PER_1K_INPUT_TOKENS = 0.0
 PRICE_PER_1K_OUTPUT_TOKENS = 0.0
 
-
 QUERY_STAGE_NAMES = {"query_embedding_ms", "vector_search_ms", "context_prep_ms", "llm_generation_ms"}
 UPLOAD_STAGE_NAMES = {"document_processing_ms", "chunk_embedding_ms"}
-
 
 def estimate_cost(input_tokens: int, output_tokens: int) -> float:
     return round(
@@ -21,7 +18,6 @@ def estimate_cost(input_tokens: int, output_tokens: int) -> float:
         + (output_tokens / 1000) * PRICE_PER_1K_OUTPUT_TOKENS,
         6,
     )
-
 
 def log_request(
     *,
@@ -60,7 +56,6 @@ def log_request(
     with _write_lock, open(ANALYTICS_LOG_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
-
 def read_all_entries() -> list[dict]:
     if not ANALYTICS_LOG_PATH.exists():
         return []
@@ -75,7 +70,6 @@ def read_all_entries() -> list[dict]:
             except json.JSONDecodeError:
                 continue
     return entries
-
 
 def build_summary() -> dict:
     entries = read_all_entries()

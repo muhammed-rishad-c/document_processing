@@ -17,7 +17,7 @@ EXTRA_HEADERS = {
     "HTTP-Referer": "http://localhost:9000",
     "X-Title": "LiquidLab RAG App",
 }
-MAX_CONTEXT_TOKENS = 4000
+MAX_CONTEXT_TOKENS = 8000
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://192.168.1.99:1234/v1")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "lm-studio")
@@ -952,6 +952,43 @@ def is_diverted_question(message: str, extracted: dict) -> bool:
 
     return classify_lead_reply_intent(message) == "new_question"
 
+FACT_RE = re.compile(
+    r"\b(price|cost|how (?:much|many|long)|when|where|who|email|phone|contact|"
+    r"discount|shipping|refund)\b",
+    re.IGNORECASE,
+)
+LIST_RE = re.compile(
+    r"\b(features?|benefits?|ingredients?|list|available|compare|comparison|"
+    r"difference|options|products?\s+(?:do you|are))\b",
+    re.IGNORECASE,
+)
+DEFINITION_RE = re.compile(
+    r"^\s*(?:what\s+(?:is|are|s)|whats|tell me about|explain|describe|about)\b",
+    re.IGNORECASE,
+)
+
+DEFINITION_FORMAT = (
+    "This is a 'what is / tell me about' question. Start with 1-2 complete sentences "
+    "saying what the product is, what it is for, and who it suits. Then add at most 4 "
+    "short bullets with key details (protein per serving, how to use, when to take), "
+    "each label used only once. NEVER answer with bullets only."
+)
+LIST_FORMAT = (
+    "Answer as a short bulleted list, bolded name first, ONE short phrase per bullet "
+    "(under ~12 words), max 6 bullets, no intro sentence. If you cut items to stay at 6, "
+    "end with: 'Ask if you'd like more detail.'"
+)
+FACT_FORMAT = "Answer in 1-2 short sentences. No bullets."
+
+def pick_format(query: str) -> str:
+    if FACT_RE.search(query or ""):
+        return FACT_FORMAT
+    if LIST_RE.search(query or ""):
+        return LIST_FORMAT
+    if DEFINITION_RE.match(query or ""):
+        return DEFINITION_FORMAT
+    return FACT_FORMAT
+
 def generate_rag_answer_with_memory(
     user_query: str,
     retrieved_chunks: list[dict],
@@ -977,6 +1014,7 @@ def generate_rag_answer_with_memory(
     t_ctx_end = time.perf_counter()
 
     is_summary_query = classify_summary_query(user_query)["is_summary"]
+    format_instruction = pick_format(user_query)   # <-- NEW
 
     doc_context = context_str if context_str else "No specific document context found."
 
@@ -1023,22 +1061,15 @@ def generate_rag_answer_with_memory(
         system_prompt = (
             f"{persona_framing}\n\n"
             "CRITICAL FORMATTING INSTRUCTIONS:\n"
-            "1. Match the length to the question: a single fact (e.g. contact info, a yes/no) gets 1-2 short "
-            "sentences. A question covering 3 or more distinct items (services, features, technologies, steps) "
-            "gets a short bulleted list. Cap any list at 6 items MAXIMUM — pick the 6 most important/representative "
-            "ones, even if the context has more. Never cram a multi-item answer into one dense sentence just to keep it short.\n"
-            "2. Keep each bullet to ONE short phrase (under ~12 words), bolded name first. No sub-explanations, "
-            "no extra clauses, no second sentence per bullet.\n"
-            "3. If you had to cut items to stay at 6, end with a brief one-line offer like 'Ask if you'd like "
-            "more detail.' Do not do this if you listed everything already.\n"
-            "4. FOR FOLLOW-UP QUESTIONS: Answer only the specific new detail asked. NEVER repeat facts, background, or context already given in earlier conversation turns.\n"
-            "5. Start your answer IMMEDIATELY with the factual response. NEVER lead with introductory, greeting, "
-            "or preamble text — and NEVER reference 'the document', 'the text', 'the context', or where the "
-            "information came from, in any phrasing, at the start or anywhere in the answer.\n"
-            "6. Do not add a closing summary sentence after a bulleted list — the list IS the answer, stop there.\n"
-            "7. Do not cite chunk tags, doc IDs, or metadata inside the answer text.\n"
-            "8. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
-            "9. If the answer cannot be found in the provided context, chat history, or remembered facts, "
+            f"1. FORMAT FOR THIS QUESTION: {format_instruction}\n"
+            "2. FOR FOLLOW-UP QUESTIONS: Answer only the new detail asked. If the fact was already given "
+            "earlier in this chat, restate it in one line instead of saying it can't be found.\n"
+            "3. Start directly with the answer. No greetings or filler like 'Sure!' or 'Here is'. "
+            "NEVER reference 'the document', 'the text', 'the context', or where the information came from.\n"
+            "4. If you use bullets, do not add a closing summary sentence after them.\n"
+            "5. Do not cite chunk tags, doc IDs, or metadata inside the answer text.\n"
+            "6. NEVER output safety check results or metadata like 'User Safety:' or 'Response Safety:'. Output ONLY the answer to the user.\n"
+            "7. If the answer cannot be found in the provided context, chat history, or remembered facts, "
             "reply EXACTLY with: "
             f'"{NO_ANSWER_TEXT}"\n\n'
             f"--- DOCUMENT CONTEXT ---\n{doc_context}\n"

@@ -104,6 +104,8 @@ Both the visitor's message and the generated answer are persisted as `ChatMessag
 
 When the chatbot can't answer a visitor's question (RAG returns `NO_ANSWER_TEXT`), it captures the visitor as a lead and routes a notification email to the correct company department automatically — instead of every unanswered question going to one inbox.
 
+For the full contact-parsing and capture-state-machine details, see [`doc_processor/app/README.md`](doc_processor/app/README.md).
+
 **Company-defined departments, not a fixed category list.** Each `Company` owns a set of `CompanyDepartment` rows (name, email, `is_default`, `is_active` — max 10 per company, admin-created). Exactly one department per company must be marked default, enforced by a partial unique DB index (`uq_company_departments_one_default`) — not just application code — so a company can never end up with zero or multiple defaults. This guarantees a captured lead always has somewhere to go, even if classification fails or is ambiguous.
 
 **Flow, end to end:**

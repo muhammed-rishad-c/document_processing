@@ -7,18 +7,14 @@ from collections import Counter
 import pymupdf as fitz
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-
 TOKENIZER_ENCODING="cl100k_base"
 tokenizer=tiktoken.get_encoding(TOKENIZER_ENCODING)
-
 
 STOP_WORDS = {
     "a", "about", "an", "and", "are", "as", "at", "be", "by", "for",
     "from", "has", "he", "in", "is", "it", "its", "of", "on", "that",
     "the", "to", "was", "were", "will", "with", "or", "this", "but"
 }
-
-
 
 def extract_text_from_file(file_bytes:bytes,filename:str)->tuple[str,str]:
     try:
@@ -58,7 +54,6 @@ STRUCTURAL_EXCLUDE_RE = re.compile(
     r"appendix|glossary|bibliography)",
     re.IGNORECASE,
 )
-
 
 def _normalize_title_for_match(title: str) -> str:
     
@@ -100,7 +95,6 @@ def _extract_tier3_llm_structure(extracted_text: str, page_count: int | None) ->
             "chapters": [],
             "chapter_count": 0,
         }
-
 
 def extract_document_structure(file_bytes: bytes, filename: str) -> dict:
     """Tier 1 (embedded PDF TOC) ONLY.
@@ -178,7 +172,6 @@ def extract_document_structure(file_bytes: bytes, filename: str) -> dict:
         "chapter_count": 0,
     }
 
-
 def needs_tier3_llm_fallback(structure: dict) -> bool:
     """True when Tier 1 found nothing and Tier 3 (LLM, run in the
     background) should be scheduled. Centralized here so main.py doesn't
@@ -210,7 +203,6 @@ def calculate_document_stats(text: str) -> dict:
         
     except Exception as e:
         raise ValueError(f"Failed to calculate document statistics: {str(e)}")
-
 
 def count_token(text:str)->int:
     return len(tokenizer.encode(text))

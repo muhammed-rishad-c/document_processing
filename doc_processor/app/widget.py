@@ -348,7 +348,6 @@ def list_widget_personas(
 ):
     return _get_active_personas(db, company.id)
 
-
 @router.post("/session", response_model=ChatSessionResponse, status_code=201)
 @limiter.limit("20/minute", key_func=key_func_by_api_key)
 def create_widget_session(
@@ -379,7 +378,6 @@ def create_widget_session(
     db.add(greeting_msg)
     db.commit()
     return session
-
 
 @router.post("/chat", response_model=WidgetChatResponse)
 @limiter.limit("10/minute", key_func=key_func_by_session_id)
@@ -625,7 +623,6 @@ def widget_chat(
             return WidgetChatResponse(session_id=payload.session_id, answer=reprompt_text)
 
     return _answer_with_rag(request, db, session, company, payload, persona)
-
 
 @router.get("/session/{session_id}")
 @limiter.limit("30/minute", key_func=key_func_by_api_key)

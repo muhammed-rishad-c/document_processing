@@ -1,0 +1,7 @@
+{
+  "title_fields": ["item_name", "question"],
+  "body_fields": ["details", "answer"],
+  "ignore_fields": ["cost_price", "supplier_code"],
+  "labels": {"price_inr": "Price (INR)", "stock_qty": "In stock"},
+  "mode": "all_except_ignored"
+}

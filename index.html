@@ -995,7 +995,7 @@
     <!-- 4. Stored documents -->
     <section class="section" id="documents-section">
       <div class="section-head">
-        <h2><span class="step">03</span>Stored documents</h2>
+        <h2><span class="step">03</span>Companies</h2>
         <button class="ghost" onclick="loadDocuments()">Refresh</button>
       </div>
       <div class="panel">
@@ -1300,7 +1300,7 @@
         hideTypingIndicator();
 
         if (response.ok) {
-                    appendMessageToThread("assistant", data.answer);
+          appendMessageToThread("assistant", data.answer);
         } else {
           appendMessageToThread("assistant", `Error: ${data.detail}`);
         }
@@ -1447,22 +1447,23 @@
     async function loadDocuments() {
       const listDiv = document.getElementById("documentList");
       try {
-        const response = await fetch(`${API_BASE}/documents`);
-        const docs = await response.json();
+        const response = await fetch(`${API_BASE}/companies-list`);
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const companies = await response.json();
 
-        if (docs.length === 0) {
-          listDiv.innerHTML = `<div class="empty-state">No documents stored yet. Upload one above to begin.</div>`;
+        if (companies.length === 0) {
+          listDiv.innerHTML = `<div class="empty-state">No companies yet.</div>`;
           return;
         }
 
-        listDiv.innerHTML = docs.map(doc => `
+        listDiv.innerHTML = companies.map(c => `
                 <div class="ledger-row">
-                    <span class="doc-name">${doc.filename}</span>
-                    <button class="danger" onclick="deleteDocument('${doc.id}')">Delete</button>
+                    <span class="doc-name">${String(c.name).replace(/</g, "&lt;")}</span>
+                    <span style="opacity:.6;font-size:.85em;">${c.is_active ? "active" : "inactive"}</span>
                 </div>
             `).join("");
       } catch (err) {
-        listDiv.innerHTML = `<div class="empty-state" style="color:var(--rose);">Failed to load documents.</div>`;
+        listDiv.innerHTML = `<div class="empty-state" style="color:var(--rose);">Failed to load companies.</div>`;
       }
     }
 

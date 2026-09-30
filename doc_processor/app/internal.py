@@ -4,7 +4,7 @@ import re
 from typing import List
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -17,7 +17,10 @@ from .db_sync import (
     sync_data_source,
     acquire_sync_lease,
     release_sync_lease,
+    validate_field_config,
+    preview_field_config,
 )
+
 from .mongo_client import get_mongo_db, provision_company_collection, drop_company_collection
 from .vector_store import qdrant, COLLECTION_NAME, delete_vectors_by_company, delete_vector
 from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -561,6 +564,63 @@ def delete_mongo_content(
 
     background_tasks.add_task(_sync_mongo_source_background, company_id, source.id)
     return {"status": "deleted"}
+
+@router.get(
+    "/companies/{company_id}/data-source/config",
+    dependencies=[Depends(verify_internal_secret)],
+)
+def get_field_config(company_id: str, db: Session = Depends(get_db)):
+    s = _get_active_mongo_source(db, company_id)
+    return {
+        "field_config": s.field_config,
+        "field_config_status": s.field_config_status,
+        "field_config_version": s.field_config_version,
+        "synced_config_version": s.synced_config_version,
+    }
+
+@router.post(
+    "/companies/{company_id}/data-source/config/preview",
+    dependencies=[Depends(verify_internal_secret)],
+)
+def preview_config(company_id: str, config: dict = Body(...), db: Session = Depends(get_db)):
+    s = _get_active_mongo_source(db, company_id)
+    try:
+        return preview_field_config(s, config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.put(
+    "/companies/{company_id}/data-source/config",
+    dependencies=[Depends(verify_internal_secret)],
+)
+def save_field_config(
+    company_id: str,
+    background_tasks: BackgroundTasks,
+    config: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    s = _get_active_mongo_source(db, company_id)
+    try:
+        cleaned = validate_field_config(config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    s.field_config = cleaned
+    s.field_config_status = "approved"
+    s.field_config_version = (s.field_config_version or 0) + 1
+    db.commit()
+    background_tasks.add_task(_sync_mongo_source_background, company_id, s.id)
+    return {"status": "approved", "version": s.field_config_version}
+
+@router.delete(
+    "/companies/{company_id}/data-source/config",
+    dependencies=[Depends(verify_internal_secret)],
+)
+def delete_field_config(company_id: str, db: Session = Depends(get_db)):
+    s = _get_active_mongo_source(db, company_id)
+    s.field_config = None
+    s.field_config_status = "none"
+    db.commit()
+    return {"status": "none"}
 
 @router.get(
     "/leads/{company_id}/download",

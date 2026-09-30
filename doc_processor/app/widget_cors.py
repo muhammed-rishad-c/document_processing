@@ -1,9 +1,7 @@
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
 from fastapi.middleware.cors import CORSMiddleware
-
 
 class ConditionalCORSMiddleware:
     """
@@ -23,7 +21,6 @@ class ConditionalCORSMiddleware:
             await self.plain_app(scope, receive, send)
         else:
             await self.cors_app(scope, receive, send)
-
 
 class WidgetCorsMiddleware(BaseHTTPMiddleware):
     """

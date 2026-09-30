@@ -203,3 +203,8 @@ class CompanyDataSource(Base):
     last_error = Column(Text, nullable=True)
     last_full_reconcile_at = Column(DateTime(timezone=True), nullable=True)
     sync_locked_until = Column(DateTime(timezone=True), nullable=True)
+
+    field_config = Column(JSONB, nullable=True)
+    field_config_status = Column(String, nullable=False, default="none", server_default="none")
+    field_config_version = Column(Integer, nullable=False, default=0, server_default="0")
+    synced_config_version = Column(Integer, nullable=False, default=0, server_default="0")

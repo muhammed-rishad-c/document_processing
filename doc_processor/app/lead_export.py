@@ -4,12 +4,10 @@ import time
 import threading
 from pathlib import Path
 from datetime import datetime, timezone
-
 from openpyxl import Workbook, load_workbook
 
 LEADS_DIR = Path(__file__).resolve().parent / "leads"
 LEADS_DIR.mkdir(parents=True, exist_ok=True)
-
 LEADS_OVERFLOW_LOG_PATH = Path(__file__).resolve().parent / "leads_overflow_log.jsonl"
 
 _write_lock = threading.Lock()
@@ -19,10 +17,8 @@ COLUMN_HEADERS = ["Timestamp", "Question", "Name", "Email", "Phone", "Session ID
 MAX_SAVE_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 0.3
 
-
 def _company_file_path(company_id: str) -> Path:
     return LEADS_DIR / f"{company_id}.xlsx"
-
 
 def _create_new_workbook(company_name: str):
     wb = Workbook()
@@ -31,7 +27,6 @@ def _create_new_workbook(company_name: str):
     ws.append([f"Company: {company_name}"])
     ws.append(COLUMN_HEADERS)
     return wb
-
 
 def _write_overflow(entry: dict, reason: str) -> None:
     """Last-resort log so a lead is never silently lost, even if the Excel
@@ -44,7 +39,6 @@ def _write_overflow(entry: dict, reason: str) -> None:
         # If even this fails, there's nothing more we can do locally —
         # surface it as loudly as possible.
         print(f"[lead_export] CRITICAL: failed to write overflow log too: {e}")
-
 
 def append_lead(
     *,

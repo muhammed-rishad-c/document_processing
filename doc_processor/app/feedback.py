@@ -8,7 +8,6 @@ _write_lock = threading.Lock()
 
 MAX_COMMENT_LENGTH = 1000
 
-
 def log_feedback(*, session_id: str, rating: int, comment: str | None = None) -> None:
     
     if not (1 <= rating <= 5):

@@ -1,0 +1,1 @@
+{"name": "TEST Dress Shop", "allowed_origins": ["http://localhost:3000"], "departments": [{"name": "Support", "email": "support@test.com", "is_default": true}]}

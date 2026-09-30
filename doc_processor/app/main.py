@@ -43,7 +43,8 @@ from .schemas import (
     ChatMessageResponse, 
     MemoryRAGRequest, 
     MemoryRAGResponse,
-    FeedbackRequest
+    FeedbackRequest,
+    CompanyListItem
 )
 from .service import (
     extract_text_from_file, 
@@ -59,10 +60,8 @@ from .vector_store import (
     get_embeddings_batch,
     delete_vector,
     store_chunk_vector,
-    search_similar_chunks
-    
+    search_similar_chunks 
 ) 
-  
 from .llm_service import(
     generate_rag_answer_with_memory,
     classify_summary_query,
@@ -72,10 +71,7 @@ from .llm_service import(
     answer_structural_query,
     classify_conversational_intent_dynamic
 )
-
-
 from .rate_limit import limiter
-
 from .widget import router as widget_router
 from .internal import router as internal_router
 from .widget_cors import WidgetCorsMiddleware,ConditionalCORSMiddleware
@@ -91,7 +87,6 @@ app = FastAPI(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
 
 load_dotenv()
 
@@ -110,8 +105,6 @@ app.add_middleware(
 ) 
 app.add_middleware(WidgetCorsMiddleware)
  
-
-
 app.include_router(internal_router)
 app.include_router(widget_router)
 WIDGET_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static", "widget")
@@ -290,7 +283,7 @@ def _run_tier3_structure_background(doc_id, extracted_text: str, page_count) -> 
         print(f"[background] Failed to persist Tier 3 structure for doc {doc_id}: {e}")
     finally:
         db.close()
-           
+            
 @app.get("/analytics")
 def get_analytics():
     return analytics.build_summary()
@@ -299,9 +292,9 @@ def get_analytics():
 async def read_index():
     return FileResponse("index.html")
 
-@app.get("/documents", response_model=list[DocumentResponse])
-def list_documents(db: Session = Depends(get_db)):
-    return db.query(Document).all() 
+@app.get("/companies-list", response_model=list[CompanyListItem])
+def list_companies(db: Session = Depends(get_db)):
+    return db.query(Company).order_by(Company.name.asc()).all()
  
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():

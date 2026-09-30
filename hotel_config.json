@@ -1,0 +1,8 @@
+{
+  "title_fields": ["room_name", "policy_title", "service_name"],
+  "body_fields": ["overview", "policy_text", "description"],
+  "ignore_fields": ["internal_notes", "staff_contact", "vendor_ref"],
+  "include_fields": ["rate_per_night", "max_guests", "amenities", "location", "price_inr"],
+  "labels": {"rate_per_night": "Price per night (INR)", "max_guests": "Max guests", "price_inr": "Price (INR)"},
+  "mode": "only_listed"
+}

@@ -17,22 +17,17 @@ COLLECTION_NAME = "document_chunks"
 
 DEBUG_CHUNKS_PATH = os.path.join(os.path.dirname(__file__), "debug_last_chunks.json")
 
-
- 
 def init_qdrant():
     collections = [c.name for c in qdrant.get_collections().collections]
     if COLLECTION_NAME not in collections:
         qdrant.create_collection(
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-        )
-        
+        )     
 init_qdrant()
-
 
 def get_embedding(text: str) -> list[float]:
     return encoder.embed_query(text)
-
 
 def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
     
@@ -45,10 +40,7 @@ def dump_chunks_for_debug(query_text: str, results: list[dict]) -> None:
     except Exception as e:
         print(f"[dump_chunks_for_debug] failed: {e}")
 
-
-
 _vectorstore = None
-
 
 def _get_vectorstore() -> QdrantVectorStore:
     global _vectorstore
@@ -59,7 +51,6 @@ def _get_vectorstore() -> QdrantVectorStore:
             embedding=encoder,
         )
     return _vectorstore
-
 
 def store_chunk_vector(chunks_data: list[dict]):
     points = []
@@ -89,7 +80,6 @@ def store_chunk_vector(chunks_data: list[dict]):
         )
     if points:
         qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
-
 
 def delete_vector(doc_id: str):
     qdrant.delete(
@@ -195,7 +185,6 @@ def search_similar_chunks(query_text: str,
 
     dump_chunks_for_debug(query_text, results)
     return results
-
 
 def fetch_parents_by_index(db_session, document_id: str, parent_indices: list[int]) -> dict[int, str]:
     

@@ -1,0 +1,8 @@
+[
+  {"item_name": "Floral Summer Dress", "details": "Lightweight cotton midi dress with a floral print. Ideal for summer outings and casual events.", "category": "dresses", "price_inr": 1799, "sizes": ["S", "M", "L", "XL"], "colors": ["Yellow", "Pink"], "stock_qty": 14, "cost_price": 720, "supplier_code": "SUP-FD-118"},
+  {"item_name": "Black Evening Gown", "details": "Floor-length satin gown with a fitted bodice and a side slit. Suitable for weddings and parties.", "category": "gowns", "price_inr": 5499, "sizes": ["M", "L"], "colors": ["Black"], "stock_qty": 3, "cost_price": 2300, "supplier_code": "SUP-EG-204", "internal_margin": "58 percent"},
+  {"item_name": "Denim Jacket", "details": "Classic blue denim jacket with a relaxed fit and two chest pockets.", "category": "jackets", "price_inr": 2299, "sizes": ["S", "M", "L"], "colors": ["Blue"], "stock_qty": 0, "cost_price": 900, "supplier_code": "SUP-DJ-077"},
+  {"item_name": "Linen Co-ord Set", "details": "Breathable linen shirt and trouser set in a neutral beige tone.", "category": "co-ords", "price_inr": 2999, "sizes": ["S", "M", "L", "XL"], "colors": ["Beige", "White"], "stock_qty": 9, "cost_price": 1250, "supplier_code": "SUP-LC-311"},
+  {"question": "What is your return policy?", "answer": "Unworn dresses with tags can be returned or exchanged within 7 days of delivery.", "content_type": "faq"},
+  {"question": "Do you offer alterations?", "answer": "Yes, we offer free basic alterations such as hemming on all gowns within 3 days of purchase.", "content_type": "faq"}
+]

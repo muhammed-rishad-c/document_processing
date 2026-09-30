@@ -18,7 +18,6 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM_ADDRESS = os.getenv("SMTP_FROM_ADDRESS", SMTP_USER)
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
 
-
 def _build_message(company: Company, lead: Lead, department_email: str) -> MIMEMultipart:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     category_display = lead.category_name or "General"
@@ -44,7 +43,6 @@ def _build_message(company: Company, lead: Lead, department_email: str) -> MIMEM
     ]
     msg.attach(MIMEText("\n".join(body_lines), "plain"))
     return msg
-
 
 def send_lead_notification(company: Company, lead: Lead, department_email: str) -> bool:
     """Sends a lead notification email to the resolved department address.

@@ -1,4 +1,3 @@
-
 import re
 from uuid import UUID
 from datetime import datetime
@@ -263,6 +262,14 @@ class CompanyResponse(BaseModel):
     created_at: datetime
     departments: List[DepartmentResponse] = []
     personas: List[PersonaResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+    
+class CompanyListItem(BaseModel):
+    id: UUID
+    name: str
+    tenant_id: str
+    is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
     

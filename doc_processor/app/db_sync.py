@@ -1,15 +1,4 @@
-"""DB-sourced ingestion sync (Plan Phase 1).
-
-Generic across every company and every content type, because every source
-table is expected to follow the hybrid shape from the plan's section 1.1:
-always `title` + `body` + `content_type`, plus a free-form `extra` JSONB
-column, plus `updated_at`.
-
-Deterministic chunk ids (uuid5 from the company + source row pk, not
-uuid4()) are what make re-sync an upsert instead of a duplicate: running
-sync twice on an unchanged table is a no-op.
-"""
-
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -47,6 +36,155 @@ def _format_row_chunk_text(row: dict) -> str:
     lines = [row["title"], row["body"]]
     lines += _flatten_extra_lines(row.get("extra") or {})
     return "\n".join(lines)
+
+def _to_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        return ", ".join(t for t in (_to_text(v) for v in value) if t)
+    if isinstance(value, dict):
+        return "\n".join(_flatten_extra_lines(value))
+    return str(value)
+
+def _hybrid_row(doc: dict) -> dict:
+    """Existing behavior: docs already in title/body/content_type/extra shape."""
+    return {
+        "id": str(doc["_id"]),
+        "title": doc.get("title", ""),
+        "body": doc.get("body", ""),
+        "content_type": doc.get("content_type") or "general",
+        "extra": doc.get("extra") or {},
+    }
+
+# ---- Layer 1: config-driven normalization ----------------------------------
+_CONFIG_SYSTEM_KEYS = {"_id", "__v", "is_deleted", "updated_at", "created_at", "sample_tag"}
+_SENSITIVE_RE = re.compile(
+    r"(password|passwd|secret|token|api[_-]?key|salt|hash|salary|cost|internal|private|ssn)",
+    re.IGNORECASE,
+)
+_ALLOWED_MODES = {"all_except_ignored", "only_listed"}
+_MAX_LIST = 100
+_MAX_NAME = 100
+
+def _get_path(doc: dict, path: str):
+    """'contacts.email' -> doc['contacts']['email']; None if any part is missing."""
+    cur = doc
+    for part in path.split("."):
+        if isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
+            return None
+    return cur
+
+def validate_field_config(config) -> dict:
+    """Validate a config and return a cleaned copy. Raises ValueError."""
+    if not isinstance(config, dict):
+        raise ValueError("config must be a JSON object")
+
+    def _names(key: str) -> list[str]:
+        value = config.get(key, [])
+        if not isinstance(value, list):
+            raise ValueError(f"{key} must be a list of field names")
+        if len(value) > _MAX_LIST:
+            raise ValueError(f"{key} has too many entries (max {_MAX_LIST})")
+        out = []
+        for item in value:
+            if not isinstance(item, str) or not item.strip() or len(item) > _MAX_NAME:
+                raise ValueError(f"{key} contains an invalid field name: {item!r}")
+            out.append(item.strip())
+        return out
+
+    mode = config.get("mode", "all_except_ignored")
+    if mode not in _ALLOWED_MODES:
+        raise ValueError(f"mode must be one of {sorted(_ALLOWED_MODES)}")
+
+    labels = config.get("labels", {})
+    if not isinstance(labels, dict) or len(labels) > _MAX_LIST:
+        raise ValueError("labels must be an object of field name -> label")
+    for k, v in labels.items():
+        if not isinstance(k, str) or not isinstance(v, str) or len(k) > _MAX_NAME or len(v) > _MAX_NAME:
+            raise ValueError("labels must map short strings to short strings")
+
+    ct_field = config.get("content_type_field", "content_type")
+    if not isinstance(ct_field, str) or len(ct_field) > _MAX_NAME:
+        raise ValueError("content_type_field must be a field name")
+
+    return {
+        "title_fields": _names("title_fields"),
+        "body_fields": _names("body_fields"),
+        "ignore_fields": _names("ignore_fields"),
+        "include_fields": _names("include_fields"),
+        "labels": dict(labels),
+        "mode": mode,
+        "content_type_field": ct_field,
+    }
+
+def _apply_field_config(doc: dict, config: dict) -> dict | None:
+    """Mongo doc -> {title, body, content_type, extra} using the config.
+    Returns None if no title and no body were found (caller falls back)."""
+    title_fields = config.get("title_fields", [])
+    body_fields = config.get("body_fields", [])
+    include = set(config.get("include_fields", []))
+    ignore = set(config.get("ignore_fields", [])) | _CONFIG_SYSTEM_KEYS
+    labels = config.get("labels", {})
+    only_listed = config.get("mode") == "only_listed"
+
+    used: set[str] = set()
+
+    title = ""
+    for path in title_fields:
+        value = _to_text(_get_path(doc, path))
+        if value:
+            title = value
+            if "." not in path:
+                used.add(path)
+            break
+
+    body_parts = []
+    for path in body_fields:
+        value = _to_text(_get_path(doc, path))
+        if value:
+            body_parts.append(value)
+            if "." not in path:
+                used.add(path)
+    body = "\n".join(body_parts)
+
+    if not title and not body:
+        return None
+
+    # Fields a person listed on purpose bypass the sensitive-name filter.
+    explicit = {p.split(".")[0] for p in title_fields + body_fields} | include
+
+    extra: dict = {}
+    for key, value in doc.items():
+        if key in used or key in ignore or value is None:
+            continue
+        if only_listed and key not in include:
+            continue
+        if _SENSITIVE_RE.search(key) and key not in explicit:
+            continue
+        extra[labels.get(key, key)] = value
+
+    content_type_key = config.get("content_type_field", "content_type")
+    return {
+        "title": title,
+        "body": body,
+        "content_type": _to_text(doc.get(content_type_key)) or "general",
+        "extra": extra,
+    }
+
+def _load_active_config(source) -> dict | None:
+    """Config for this sync, or None to use the existing hybrid rules.
+    Only an APPROVED, valid config is used."""
+    if source.field_config_status != "approved" or not source.field_config:
+        return None
+    try:
+        return validate_field_config(source.field_config)
+    except ValueError as e:
+        print(f"[mongo:sync] company={source.company_id} ignoring invalid config: {e}")
+        return None
 
 def _delete_row_chunks(db_session, company_id, row_pk, data_source_id) -> None:   
     
@@ -247,10 +385,13 @@ def sync_mongo_source(db_session, source: CompanyDataSource) -> dict:
     from .mongo_client import get_mongo_db
 
     since = source.last_synced_at or EPOCH
+
+    config = _load_active_config(source)
+    config_version = source.field_config_version or 0
+    if config is not None and (source.synced_config_version or 0) != config_version:
+        since = EPOCH  
+
     sync_start = datetime.now(timezone.utc)
-    # Watermark = sync start (minus overlap), not end. A doc written mid-sync
-    # isn't missed — the overlap is safe because sync is delete-then-insert
-    # (idempotent). Plan section 3, decision 7.
     watermark = sync_start - timedelta(seconds=DB_SYNC_OVERLAP_SECONDS)
 
     col = get_mongo_db()[source.collection_name]
@@ -261,6 +402,8 @@ def sync_mongo_source(db_session, source: CompanyDataSource) -> dict:
 
     rows_upserted = 0
     rows_deleted = 0
+    rows_by_config = 0
+    rows_by_fallback = 0
     db_chunks_to_add = []
     vector_data = []
 
@@ -276,13 +419,12 @@ def sync_mongo_source(db_session, source: CompanyDataSource) -> dict:
             rows_deleted += 1
             continue
 
-        row = {
-            "id": row_pk,
-            "title": doc.get("title", ""),
-            "body": doc.get("body", ""),
-            "content_type": doc.get("content_type") or "general",
-            "extra": doc.get("extra") or {},
-        }
+        row = _apply_field_config(doc, config) if config is not None else None
+        if row is not None:
+            rows_by_config += 1
+        else:
+            row = _hybrid_row(doc)
+            rows_by_fallback += 1
         chunk_text_full = _format_row_chunk_text(row)
         content_type = row["content_type"]
 
@@ -375,6 +517,8 @@ def sync_mongo_source(db_session, source: CompanyDataSource) -> dict:
 
     source.last_synced_at = watermark
     source.last_run_at = sync_start
+    if config is not None:
+        source.synced_config_version = config_version
     source.last_status = "ok"
     source.last_error = None
     db_session.add(source)
@@ -386,8 +530,28 @@ def sync_mongo_source(db_session, source: CompanyDataSource) -> dict:
     return {
         "rows_upserted": rows_upserted,
         "rows_deleted": rows_deleted,
+        "rows_by_config": rows_by_config,
+        "rows_by_fallback": rows_by_fallback,
         "duration_ms": None,
     }
+    
+def preview_field_config(source, config: dict, limit: int = 5) -> list[dict]:
+    from .mongo_client import get_mongo_db
+    cleaned = validate_field_config(config)
+    col = get_mongo_db()[source.collection_name]
+    results = []
+    for doc in col.find({"is_deleted": {"$ne": True}}).sort("_id", -1).limit(limit):
+        row = _apply_field_config(doc, cleaned)
+        layer = "config"
+        if row is None:
+            row = _hybrid_row(doc)
+            layer = "fallback"
+        results.append({
+            "doc_id": str(doc["_id"]),
+            "layer": layer,
+            "embedded_text": _format_row_chunk_text(row),
+        })
+    return results
 
 def _record_sync_status(db_session, source_id, status: str, error: str | None) -> None:
     try:
